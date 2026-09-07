@@ -1,7 +1,6 @@
-﻿cmake_minimum_required(VERSION 3.25)
+﻿cmake_minimum_required(VERSION 4.0)
 
 project(Celestial-Rays
-	VERSION 1.0.0
 	LANGUAGES CXX
 )
 
@@ -11,6 +10,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(Celestial-Rays
 	src/main.cpp
+	src/Window.cpp
+)
+
+target_sources(Celestial-Rays
+	PRIVATE
+		FILE_SET modules
+		TYPE CXX_MODULES
+		FILES
+			src/Window.cppm
 )
 
 target_compile_definitions(Celestial-Rays PRIVATE
