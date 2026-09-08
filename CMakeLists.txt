@@ -11,7 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(Celestial-Rays
 	src/main.cpp
 	src/Window.cpp
-)
+ "src/VulkanContext.cpp")
 
 target_sources(Celestial-Rays
 	PRIVATE
@@ -19,7 +19,7 @@ target_sources(Celestial-Rays
 		TYPE CXX_MODULES
 		FILES
 			src/Window.cppm
-)
+ "src/VulkanContext.cppm")
 
 target_compile_definitions(Celestial-Rays PRIVATE
 	VK_USE_PLATFORM_WIN32_KHR
