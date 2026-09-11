@@ -7,6 +7,7 @@ module;
 #include <cstdint>
 #include <cstring>
 #include <format>
+#include <optional>
 #include <print>
 #include <stdexcept>
 #include <vector>
@@ -359,28 +360,7 @@ VulkanContext::VulkanContext(const Window& window) : _window(window)
 	CreateRenderImage();
 }
 
-VulkanContext::~VulkanContext()
-{
-	if (_renderImageView) vkDestroyImageView(_device, _renderImageView, nullptr);
-
-	if (_renderImage) vkDestroyImage(_device, _renderImage, nullptr);
-
-	if (_renderImageMemory) vkFreeMemory(_device, _renderImageMemory, nullptr);
-
-	if (_swapchain) vkDestroySwapchainKHR(_device, _swapchain, nullptr);
-
-	if (_device) vkDestroyDevice(_device, nullptr);
-
-	if (_surface) vkDestroySurfaceKHR(_instance, _surface, nullptr);
-
-	if (_debugMessenger)
-	{
-		auto destroyDebugFn = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(_instance, "vkDestroyDebugUtilsMessengerEXT"));
-		if (destroyDebugFn) destroyDebugFn(_instance, _debugMessenger, nullptr);
-	}
-
-	if (_instance) vkDestroyInstance(_instance, nullptr);
-}
+VulkanContext::~VulkanContext() { }
 
 void VulkanContext::CreateInstance()
 {
@@ -409,20 +389,12 @@ void VulkanContext::CreateInstance()
 		.ppEnabledExtensionNames = Extensions
 	};
 
-	VkResult result{ vkCreateInstance(&instanceInfo, nullptr, &_instance) };
-
-	if (result != VK_SUCCESS) throw std::runtime_error("Failed to create Vulkan instance");
+	_instance.emplace(&instanceInfo);
 }
 
 void VulkanContext::CreateDebugMessenger()
 {
-	auto createDebugFn = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(_instance, "vkCreateDebugUtilsMessengerEXT"));
-
-	if (!createDebugFn) throw std::runtime_error("Failed to retrieve instance debug messenger creator");
-
-	VkResult result{ createDebugFn(_instance, &MessengerInfo, nullptr, &_debugMessenger) };
-
-	if (result != VK_SUCCESS) throw std::runtime_error("Failed to create Vulkan debug messenger");
+	_debugMessenger.emplace(_instance->GetInstance(), &MessengerInfo);
 }
 
 void VulkanContext::CreateSurface()
@@ -433,21 +405,21 @@ void VulkanContext::CreateSurface()
 		.hwnd = _window.Handle()
 	};
 
-	VkResult result{ vkCreateWin32SurfaceKHR(_instance, &surfaceInfo, nullptr, &_surface) };
-
-	if (result != VK_SUCCESS) throw std::runtime_error("Failed to create Vulkan surface");
+	_surface.emplace(_instance->GetInstance(), &surfaceInfo);
 }
 
 void VulkanContext::PickPhysicalDevice()
 {
+	VkInstance instance{ _instance->GetInstance() };
+
 	std::uint32_t deviceCount{};
-	VkResult result{ vkEnumeratePhysicalDevices(_instance, &deviceCount, nullptr) };
+	VkResult result{ vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr) };
 
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to enumerate physical devices");
 	if (deviceCount == 0) throw std::runtime_error("No Vulkan-capable physical devices found");
 
 	std::vector<VkPhysicalDevice> availableDevices(deviceCount);
-	result = vkEnumeratePhysicalDevices(_instance, &deviceCount, availableDevices.data());
+	result = vkEnumeratePhysicalDevices(instance, &deviceCount, availableDevices.data());
 
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to retrieve physical devices");
 
@@ -458,7 +430,7 @@ void VulkanContext::PickPhysicalDevice()
 
 		std::println("Found GPU: {}", properties.deviceName);
 		
-		QueueFamilyIndices indices{ FindQueueFamilies(device, _surface) };
+		QueueFamilyIndices indices{ FindQueueFamilies(device, _surface->GetSurface()) };
 
 		if (!indices.Complete()) continue;
 
@@ -494,17 +466,17 @@ void VulkanContext::CreateLogicalDevice()
 		.ppEnabledExtensionNames = DeviceExtensions
 	};
 
-	VkResult result{ vkCreateDevice(_physicalDevice, &deviceInfo, nullptr, &_device) };
+	_device.emplace(_physicalDevice, &deviceInfo);
 
-	if (result != VK_SUCCESS) throw std::runtime_error("Failed to create logical device");
-
-	vkGetDeviceQueue(_device, _queueFamily, 0, &_queue);
+	vkGetDeviceQueue(_device->GetDevice(), _queueFamily, 0, &_queue);
 }
 
 void VulkanContext::CreateSwapchain()
 {
+	VkSurfaceKHR surface{ _surface->GetSurface() };
+	VkDevice device{ _device->GetDevice() };
 
-	SwapchainSupportDetails support{ QuerySwapchainSupport(_physicalDevice, _surface) };
+	SwapchainSupportDetails support{ QuerySwapchainSupport(_physicalDevice, surface) };
 
 	if (support.formats.empty()) throw std::runtime_error("Surface has no supported formats");
 	if (support.presentModes.empty()) throw std::runtime_error("Surface has no supported present modes");
@@ -525,7 +497,7 @@ void VulkanContext::CreateSwapchain()
 
 	VkSwapchainCreateInfoKHR swapchainInfo{
 		.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-		.surface = _surface,
+		.surface = surface,
 		.minImageCount = imageCount,
 		.imageFormat = surfaceFormat.format,
 		.imageColorSpace = surfaceFormat.colorSpace,
@@ -539,20 +511,20 @@ void VulkanContext::CreateSwapchain()
 		.clipped = VK_TRUE
 	};
 
-	VkResult result{ vkCreateSwapchainKHR(_device, &swapchainInfo, nullptr, &_swapchain) };
+	_swapchain.emplace(device, &swapchainInfo);
 
-	if (result != VK_SUCCESS) throw std::runtime_error("Failed to create swapchain");
+	VkSwapchainKHR swapchain{ _swapchain->GetSwapchain() };
 
 	_swapchainFormat = surfaceFormat.format;
 	_swapchainExtent = extent;
 
 	std::uint32_t actualImageCount{};
-	result = vkGetSwapchainImagesKHR(_device, _swapchain, &actualImageCount, nullptr);
+	VkResult result{ vkGetSwapchainImagesKHR(device, swapchain, &actualImageCount, nullptr) };
 
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to query swapchain image count");
 
 	_swapchainImages.resize(actualImageCount);
-	result = vkGetSwapchainImagesKHR(_device, _swapchain, &actualImageCount, _swapchainImages.data());
+	result = vkGetSwapchainImagesKHR(device, swapchain, &actualImageCount, _swapchainImages.data());
 
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to query swapchain images");
 
@@ -571,6 +543,8 @@ void VulkanContext::CreateRenderImage()
 
 	_renderImageFormat = VK_FORMAT_R8G8B8A8_UNORM;
 	_renderImageExtent = _swapchainExtent;
+
+	VkDevice device{ _device->GetDevice() };
 
 	if (!CheckImageFormatSupport(_physicalDevice, _renderImageFormat, RenderImageUsage))
 	{
@@ -595,12 +569,12 @@ void VulkanContext::CreateRenderImage()
 		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
 	};
 
-	VkResult result{ vkCreateImage(_device, &imageInfo, nullptr, &_renderImage) };
+	_renderImage.emplace(device, &imageInfo);
 
-	if (result != VK_SUCCESS) throw std::runtime_error("Failed to create render image");
+	VkImage renderImage{ _renderImage->GetImage() };
 
 	VkMemoryRequirements memoryRequirements{};
-	vkGetImageMemoryRequirements(_device, _renderImage, &memoryRequirements);
+	vkGetImageMemoryRequirements(device, renderImage, &memoryRequirements);
 
 	VkMemoryAllocateInfo allocateInfo{
 		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -612,17 +586,15 @@ void VulkanContext::CreateRenderImage()
 		)
 	};
 
-	result = vkAllocateMemory(_device, &allocateInfo, nullptr, &_renderImageMemory);
+	_renderImageMemory.emplace(device, &allocateInfo);
 
-	if (result != VK_SUCCESS) throw std::runtime_error("Failed to allocate render image memory");
-
-	result = vkBindImageMemory(_device, _renderImage, _renderImageMemory, 0);
+	VkResult result{ vkBindImageMemory(device, renderImage, _renderImageMemory->GetMemory(), 0)};
 
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to bind render image memory");
 
 	VkImageViewCreateInfo viewInfo{
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-		.image = _renderImage,
+		.image = renderImage,
 		.viewType = VK_IMAGE_VIEW_TYPE_2D,
 		.format = _renderImageFormat,
 		.subresourceRange = {
@@ -634,9 +606,7 @@ void VulkanContext::CreateRenderImage()
 		}
 	};
 
-	result = vkCreateImageView(_device, &viewInfo, nullptr, &_renderImageView);
-
-	if (result != VK_SUCCESS) throw std::runtime_error("Failed to create render image view");
+	_renderImageView.emplace(device, &viewInfo);
 
 	std::println("\nRender image: {}x{}, format {}",
 		_renderImageExtent.width,

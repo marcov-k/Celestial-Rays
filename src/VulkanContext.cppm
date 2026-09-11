@@ -4,10 +4,12 @@ module;
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 export module Celestial.Vulkan;
 
+import Celestial.Vulkan.Wrappers;
 import Celestial.Window;
 
 export class VulkanContext
@@ -22,22 +24,22 @@ public:
 private:
 	const Window& _window;
 
-	VkInstance _instance{};
-	VkDebugUtilsMessengerEXT _debugMessenger{};
-	VkSurfaceKHR _surface{};
+	std::optional<VulkanInstance> _instance;
+	std::optional<VulkanDebugMessenger> _debugMessenger;
+	std::optional<VulkanSurface> _surface;
 	VkPhysicalDevice _physicalDevice{};
-	VkDevice _device{};
+	std::optional<VulkanDevice> _device;
 	std::uint32_t _queueFamily{ UINT32_MAX };
 	VkQueue _queue{};
 
-	VkSwapchainKHR _swapchain{};
+	std::optional<VulkanSwapchain> _swapchain;
 	VkFormat _swapchainFormat{};
 	VkExtent2D _swapchainExtent{};
 	std::vector<VkImage> _swapchainImages;
 
-	VkImage _renderImage{};
-	VkDeviceMemory _renderImageMemory{};
-	VkImageView _renderImageView{};
+	std::optional<VulkanDeviceMemory> _renderImageMemory;
+	std::optional<VulkanImage> _renderImage;
+	std::optional<VulkanImageView> _renderImageView;
 	VkFormat _renderImageFormat{};
 	VkExtent2D _renderImageExtent{};
 
