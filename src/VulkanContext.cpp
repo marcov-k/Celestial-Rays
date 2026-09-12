@@ -358,6 +358,9 @@ VulkanContext::VulkanContext(const Window& window) : _window(window)
 
 	CreateSwapchain();
 	CreateRenderImage();
+
+	CreateCommandPool();
+	AllocateCommandBuffer();
 }
 
 VulkanContext::~VulkanContext() { }
@@ -612,4 +615,29 @@ void VulkanContext::CreateRenderImage()
 		_renderImageExtent.width,
 		_renderImageExtent.height,
 		static_cast<int>(_renderImageFormat));
+}
+
+void VulkanContext::CreateCommandPool()
+{
+	VkCommandPoolCreateInfo poolInfo{
+		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+		.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+		.queueFamilyIndex = _queueFamily
+	};
+
+	_commandPool.emplace(_device->GetDevice(), &poolInfo);
+}
+
+void VulkanContext::AllocateCommandBuffer()
+{
+	VkCommandBufferAllocateInfo bufferInfo{
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.commandPool = _commandPool->GetCommandPool(),
+		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandBufferCount = 1
+	};
+
+	VkResult result{ vkAllocateCommandBuffers(_device->GetDevice(), &bufferInfo, &_commandBuffer) };
+
+	if (result != VK_SUCCESS) throw std::runtime_error("Failed to allocate command buffer");
 }

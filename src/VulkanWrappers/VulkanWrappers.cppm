@@ -133,3 +133,17 @@ private:
 	VkDevice _device{};
 	VkDeviceMemory _memory{};
 };
+
+export class VulkanCommandPool : VulkanResource
+{
+public:
+	explicit VulkanCommandPool(VkDevice device, const VkCommandPoolCreateInfo* pCreateInfo,
+		std::optional<VkAllocationCallbacks> allocator = std::nullopt);
+	~VulkanCommandPool();
+
+	VkCommandPool GetCommandPool() const;
+
+private:
+	VkDevice _device{};
+	VkCommandPool _commandPool{};
+};

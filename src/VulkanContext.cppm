@@ -43,6 +43,9 @@ private:
 	VkFormat _renderImageFormat{};
 	VkExtent2D _renderImageExtent{};
 
+	std::optional<VulkanCommandPool> _commandPool;
+	VkCommandBuffer _commandBuffer{};
+
 	void CreateInstance();
 	void CreateDebugMessenger();
 	void CreateSurface();
@@ -52,4 +55,7 @@ private:
 
 	void CreateSwapchain();
 	void CreateRenderImage();
+
+	void CreateCommandPool();
+	void AllocateCommandBuffer();
 };
