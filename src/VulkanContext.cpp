@@ -1,12 +1,12 @@
 module;
 
-#define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <format>
+#include <fstream>
 #include <optional>
 #include <print>
 #include <stdexcept>
@@ -315,6 +315,26 @@ namespace
 		throw std::runtime_error("Failed to find suitable Vulkan memory type");
 	}
 
+	std::vector<std::uint32_t> GetShaderBinary(const std::string& shaderName)
+	{
+		std::string path{ std::format("{}/{}.comp.spv", CELESTIAL_SHADER_DIR, shaderName) };
+
+		std::ifstream file{ path, std::ios::binary | std::ios::ate };
+		if (!file) throw std::runtime_error("Failed to open shader binary file");
+
+		const std::streamsize fileSize = file.tellg();
+		file.seekg(0, std::ios::beg);
+
+		if (fileSize <= 0) throw std::runtime_error("Shader binary file empty");
+		if (fileSize % sizeof(std::uint32_t) != 0) throw std::runtime_error("Invalid SPIR-V file size");
+
+		std::vector<std::uint32_t> code(static_cast<std::size_t>(fileSize) / sizeof(std::uint32_t));
+
+		file.read(reinterpret_cast<char*>(code.data()), fileSize);
+
+		return code;
+	}
+
 	VKAPI_ATTR VkBool32 VKAPI_CALL DebugMessengerCallback(
 		VkDebugUtilsMessageSeverityFlagBitsEXT severityFlag,
 		VkDebugUtilsMessageTypeFlagsEXT typeFlag,
@@ -361,6 +381,15 @@ VulkanContext::VulkanContext(const Window& window) : _window(window)
 
 	CreateCommandPool();
 	AllocateCommandBuffer();
+
+	CreateShaderModule();
+
+	CreateDescriptorSetLayout();
+	CreatePipelineLayout();
+	CreatePipeline();
+
+	CreateDescriptorPool();
+	AllocateDescriptorSet();
 }
 
 VulkanContext::~VulkanContext() { }
@@ -640,4 +669,117 @@ void VulkanContext::AllocateCommandBuffer()
 	VkResult result{ vkAllocateCommandBuffers(_device->GetDevice(), &bufferInfo, &_commandBuffer) };
 
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to allocate command buffer");
+}
+
+void VulkanContext::CreateShaderModule()
+{
+	auto code = GetShaderBinary("gradient");
+
+	VkShaderModuleCreateInfo moduleInfo{
+		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+		.codeSize = code.size() * sizeof(std::uint32_t),
+		.pCode = code.data()
+	};
+
+	_shaderModule.emplace(_device->GetDevice(), &moduleInfo);
+}
+
+void VulkanContext::CreateDescriptorSetLayout()
+{
+	VkDescriptorSetLayoutBinding binding{
+		.binding = 0,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+	};
+
+	VkDescriptorSetLayoutCreateInfo layoutInfo{
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		.bindingCount = 1,
+		.pBindings = &binding
+	};
+
+	_descriptorSetLayout.emplace(_device->GetDevice(), &layoutInfo);
+}
+
+void VulkanContext::CreatePipelineLayout()
+{
+	VkDescriptorSetLayout setLayout{ _descriptorSetLayout->GetDescriptorSetLayout() };
+	VkPipelineLayoutCreateInfo layoutInfo{
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+		.setLayoutCount = 1,
+		.pSetLayouts = &setLayout
+	};
+
+	_pipelineLayout.emplace(_device->GetDevice(), &layoutInfo);
+}
+
+void VulkanContext::CreatePipeline()
+{
+	VkPipelineShaderStageCreateInfo shaderStageInfo{
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+		.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+		.module = _shaderModule->GetShaderModule(),
+		.pName = "main"
+	};
+
+	VkComputePipelineCreateInfo pipelineInfo{
+		.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+		.stage = shaderStageInfo,
+		.layout = _pipelineLayout->GetPipelineLayout(),
+		.basePipelineHandle = VK_NULL_HANDLE,
+		.basePipelineIndex = -1
+	};
+
+	_pipeline.emplace(_device->GetDevice(), &pipelineInfo);
+}
+
+void VulkanContext::CreateDescriptorPool()
+{
+	VkDescriptorPoolSize poolSize{
+		.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+		.descriptorCount = 1
+	};
+
+	VkDescriptorPoolCreateInfo poolInfo{
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+		.maxSets = 1,
+		.poolSizeCount = 1,
+		.pPoolSizes = &poolSize
+	};
+
+	_descriptorPool.emplace(_device->GetDevice(), &poolInfo);
+}
+
+void VulkanContext::AllocateDescriptorSet()
+{
+	VkDescriptorSetLayout setLayout{ _descriptorSetLayout->GetDescriptorSetLayout() };
+
+	VkDescriptorSetAllocateInfo setInfo{
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.descriptorPool = _descriptorPool->GetDescriptorPool(),
+		.descriptorSetCount = 1,
+		.pSetLayouts = &setLayout
+	};
+
+	VkResult result{ vkAllocateDescriptorSets(_device->GetDevice(), &setInfo, &_descriptorSet) };
+
+	if (result != VK_SUCCESS) throw std::runtime_error("Failed to allocate Vulkan descriptor set");
+
+	VkDescriptorImageInfo imageInfo{
+		.imageView = _renderImageView->GetImageView(),
+		.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+	};
+
+	VkWriteDescriptorSet setWrite{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = _descriptorSet,
+		.dstBinding = 0,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+		.pImageInfo = &imageInfo
+	};
+
+	vkUpdateDescriptorSets(_device->GetDevice(), 1, &setWrite, 0, nullptr);
 }

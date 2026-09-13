@@ -1,6 +1,5 @@
 module;
 
-#define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
@@ -46,6 +45,15 @@ private:
 	std::optional<VulkanCommandPool> _commandPool;
 	VkCommandBuffer _commandBuffer{};
 
+	std::optional<VulkanShaderModule> _shaderModule;
+
+	std::optional<VulkanDescriptorSetLayout> _descriptorSetLayout;
+	std::optional<VulkanPipelineLayout> _pipelineLayout;
+	std::optional<VulkanComputePipeline> _pipeline;
+
+	std::optional<VulkanDescriptorPool> _descriptorPool;
+	VkDescriptorSet _descriptorSet{};
+
 	void CreateInstance();
 	void CreateDebugMessenger();
 	void CreateSurface();
@@ -58,4 +66,13 @@ private:
 
 	void CreateCommandPool();
 	void AllocateCommandBuffer();
+
+	void CreateShaderModule();
+
+	void CreateDescriptorSetLayout();
+	void CreatePipelineLayout();
+	void CreatePipeline();
+
+	void CreateDescriptorPool();
+	void AllocateDescriptorSet();
 };

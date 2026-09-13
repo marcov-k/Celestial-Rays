@@ -1,6 +1,5 @@
 module;
 
-#define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>
 
 #include <optional>
@@ -146,4 +145,74 @@ public:
 private:
 	VkDevice _device{};
 	VkCommandPool _commandPool{};
+};
+
+export class VulkanShaderModule : VulkanResource
+{
+public:
+	explicit VulkanShaderModule(VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo,
+		std::optional<VkAllocationCallbacks> allocator = std::nullopt);
+	~VulkanShaderModule();
+
+	VkShaderModule GetShaderModule() const;
+
+private:
+	VkDevice _device{};
+	VkShaderModule _shaderModule{};
+};
+
+export class VulkanDescriptorSetLayout : VulkanResource
+{
+public:
+	explicit VulkanDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo* pCreateInfo,
+		std::optional<VkAllocationCallbacks> allocator = std::nullopt);
+	~VulkanDescriptorSetLayout();
+
+	VkDescriptorSetLayout GetDescriptorSetLayout() const;
+
+private:
+	VkDevice _device{};
+	VkDescriptorSetLayout _setLayout{};
+};
+
+export class VulkanPipelineLayout : VulkanResource
+{
+public:
+	explicit VulkanPipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo* pCreateInfo,
+		std::optional<VkAllocationCallbacks> allocator = std::nullopt);
+	~VulkanPipelineLayout();
+
+	VkPipelineLayout GetPipelineLayout() const;
+
+private:
+	VkDevice _device{};
+	VkPipelineLayout _pipelineLayout{};
+};
+
+export class VulkanComputePipeline : VulkanResource
+{
+public:
+	explicit VulkanComputePipeline(VkDevice device, const VkComputePipelineCreateInfo* pCreateInfo,
+		std::optional<VkAllocationCallbacks> allocator = std::nullopt);
+	~VulkanComputePipeline();
+
+	VkPipeline GetPipeline() const;
+
+private:
+	VkDevice _device{};
+	VkPipeline _pipeline{};
+};
+
+export class VulkanDescriptorPool : VulkanResource
+{
+public:
+	explicit VulkanDescriptorPool(VkDevice device, const VkDescriptorPoolCreateInfo* pCreateInfo,
+		std::optional<VkAllocationCallbacks> allocator = std::nullopt);
+	~VulkanDescriptorPool();
+
+	VkDescriptorPool GetDescriptorPool() const;
+
+private:
+	VkDevice _device{};
+	VkDescriptorPool _descriptorPool{};
 };
