@@ -12,13 +12,16 @@ int main()
 	{
 		HINSTANCE instance = GetModuleHandleW(nullptr);
 
-		Window window(instance, 1280, 720, L"Celestial-Rays");
+		Window window(instance, 1920, 1080, L"Celestial-Rays");
 
 		VulkanContext vulkan{ window };
 
 		while (!window.ShouldClose())
 		{
 			window.ProcessEvents();
+
+			if (window.Width() == 0 || window.Height() == 0) continue;
+
 			vulkan.DrawFrame();
 		}
 

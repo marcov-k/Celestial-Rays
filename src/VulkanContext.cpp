@@ -407,7 +407,9 @@ void VulkanContext::DrawFrame()
 
 	VkResult result{ vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX) };
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to wait for in-flight fence");
-	GetSwapchainImageIndex();
+
+	if (!GetSwapchainImageIndex()) return; // swapchain just recreated - retry next frame
+
 	result = vkResetFences(device, 1, &fence);
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to reset in-flight fence");
 
@@ -427,7 +429,7 @@ void VulkanContext::DrawFrame()
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to end command buffer");
 
 	SubmitCommandBuffer();
-	Present();
+	if (!Present()) RecreateSwapchain();
 }
 
 void VulkanContext::CreateInstance()
@@ -495,8 +497,6 @@ void VulkanContext::PickPhysicalDevice()
 	{
 		VkPhysicalDeviceProperties properties{};
 		vkGetPhysicalDeviceProperties(device, &properties);
-
-		std::println("Found GPU: {}", properties.deviceName);
 		
 		QueueFamilyIndices indices{ FindQueueFamilies(device, _surface->GetSurface()) };
 
@@ -506,8 +506,6 @@ void VulkanContext::PickPhysicalDevice()
 
 		_physicalDevice = device;
 		_queueFamily = indices.graphics;
-
-		std::println("Selected GPU: {}", properties.deviceName);
 
 		break;
 	}
@@ -601,11 +599,6 @@ void VulkanContext::CreateSwapchain()
 	result = vkGetSwapchainImagesKHR(device, swapchain, &actualImageCount, _swapchainImages.data());
 
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to query swapchain images");
-
-	std::println("\nSwapchain: {}x{}, {} images",
-		_swapchainExtent.width,
-		_swapchainExtent.height,
-		_swapchainImages.size());
 }
 
 void VulkanContext::CreateRenderImage()
@@ -681,11 +674,29 @@ void VulkanContext::CreateRenderImage()
 	};
 
 	_renderImageView.emplace(device, &viewInfo);
+}
 
-	std::println("\nRender image: {}x{}, format {}",
-		_renderImageExtent.width,
-		_renderImageExtent.height,
-		static_cast<int>(_renderImageFormat));
+void VulkanContext::RecreateSwapchain()
+{
+	if (_window.Width() == 0 || _window.Height() == 0) return;
+
+	VkDevice device{ _device->GetDevice() };
+	vkDeviceWaitIdle(device);
+
+	_renderImageView.reset();
+	_renderImage.reset();
+	_renderImageMemory.reset();
+	_swapchain.reset();
+
+	CreateSwapchain();
+	CreateRenderImage();
+	UpdateDescriptorSet();
+
+	if (_renderFinishedSemaphores.size() != _swapchainImages.size())
+	{
+		_renderFinishedSemaphores.clear();
+		CreateRenderSemaphores();
+	}
 }
 
 void VulkanContext::CreateCommandPool()
@@ -837,9 +848,19 @@ void VulkanContext::CreateSemaphores()
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
 	};
 
-	VkDevice device{ _device->GetDevice() };
-	_imageAvailableSemaphore.emplace(device, &semaphoreInfo);
+	_imageAvailableSemaphore.emplace(_device->GetDevice(), &semaphoreInfo);
 	
+	CreateRenderSemaphores();
+}
+
+void VulkanContext::CreateRenderSemaphores()
+{
+	VkSemaphoreCreateInfo semaphoreInfo{
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
+	};
+
+	VkDevice device{ _device->GetDevice() };
+
 	_renderFinishedSemaphores.resize(_swapchainImages.size());
 	for (auto& semaphore : _renderFinishedSemaphores)
 	{
@@ -900,12 +921,23 @@ void VulkanContext::BindAndDispatchShader()
 	vkCmdDispatch(_commandBuffer, workgroupsX, workgroupsY, 1);
 }
 
-void VulkanContext::GetSwapchainImageIndex()
+bool VulkanContext::GetSwapchainImageIndex()
 {
 	VkResult result{ vkAcquireNextImageKHR(_device->GetDevice(), _swapchain->GetSwapchain(), UINT64_MAX,
 		_imageAvailableSemaphore->GetSemaphore(), VK_NULL_HANDLE, &_swapchainImageIndex) };
 
-	if (result != VK_SUCCESS) throw std::runtime_error("Failed to acquire next swapchain image index");
+	if (result == VK_ERROR_OUT_OF_DATE_KHR)
+	{
+		RecreateSwapchain();
+		return false;
+	}
+
+	if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+	{
+		throw std::runtime_error("Failed to acquire next swapchain image index");
+	}
+
+	return true;
 }
 
 void VulkanContext::PrepareRenderImageForCopy() const
@@ -1029,7 +1061,7 @@ void VulkanContext::SubmitCommandBuffer() const
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to submit command buffer");
 }
 
-void VulkanContext::Present() const
+bool VulkanContext::Present() const
 {
 	VkSwapchainKHR swapchain{ _swapchain->GetSwapchain() };
 	VkSemaphore renderFinished{ _renderFinishedSemaphores[_swapchainImageIndex]->GetSemaphore() };
@@ -1045,5 +1077,8 @@ void VulkanContext::Present() const
 
 	VkResult result{ vkQueuePresentKHR(_queue, &presentInfo) };
 
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) return false;
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to present swapchain image");
+
+	return true;
 }

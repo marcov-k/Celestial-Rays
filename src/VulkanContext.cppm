@@ -71,6 +71,7 @@ private:
 
 	void CreateSwapchain();
 	void CreateRenderImage();
+	void RecreateSwapchain();
 
 	void CreateCommandPool();
 	void AllocateCommandBuffer();
@@ -86,13 +87,14 @@ private:
 	void UpdateDescriptorSet() const;
 
 	void CreateSemaphores();
+	void CreateRenderSemaphores();
 	void CreateFence();
 
 	void BeginCommandBuffer() const;
 	void TransitionRenderImage() const;
 	void BindAndDispatchShader();
 
-	void GetSwapchainImageIndex();
+	bool GetSwapchainImageIndex();
 	
 	void PrepareRenderImageForCopy() const;
 	void PrepareSwapchainImageForCopy() const;
@@ -100,5 +102,5 @@ private:
 	void PrepareSwapchainImageForPresent() const;
 
 	void SubmitCommandBuffer() const;
-	void Present() const;
+	bool Present() const;
 };
