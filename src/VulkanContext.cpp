@@ -390,9 +390,45 @@ VulkanContext::VulkanContext(const Window& window) : _window(window)
 
 	CreateDescriptorPool();
 	AllocateDescriptorSet();
+
+	CreateSemaphores();
+	CreateFence();
 }
 
-VulkanContext::~VulkanContext() { }
+VulkanContext::~VulkanContext()
+{
+	vkDeviceWaitIdle(_device->GetDevice());
+}
+
+void VulkanContext::DrawFrame()
+{
+	VkDevice device{ _device->GetDevice() };
+	VkFence fence{ _inFlightFence->GetFence() };
+
+	VkResult result{ vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX) };
+	if (result != VK_SUCCESS) throw std::runtime_error("Failed to wait for in-flight fence");
+	GetSwapchainImageIndex();
+	result = vkResetFences(device, 1, &fence);
+	if (result != VK_SUCCESS) throw std::runtime_error("Failed to reset in-flight fence");
+
+	result = vkResetCommandBuffer(_commandBuffer, 0);
+	if (result != VK_SUCCESS) throw std::runtime_error("Failed to reset command buffer");
+
+	BeginCommandBuffer();
+	TransitionRenderImage();
+	BindAndDispatchShader();
+
+	PrepareRenderImageForCopy();
+	PrepareSwapchainImageForCopy();
+	CopyRenderImageToSwapchain();
+	PrepareSwapchainImageForPresent();
+
+	result = vkEndCommandBuffer(_commandBuffer);
+	if (result != VK_SUCCESS) throw std::runtime_error("Failed to end command buffer");
+
+	SubmitCommandBuffer();
+	Present();
+}
 
 void VulkanContext::CreateInstance()
 {
@@ -490,8 +526,14 @@ void VulkanContext::CreateLogicalDevice()
 		.pQueuePriorities = &QueuePriority
 	};
 
+	VkPhysicalDeviceVulkan13Features sync2Features{
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+		.synchronization2 = VK_TRUE
+	};
+
 	VkDeviceCreateInfo deviceInfo{
 		.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+		.pNext = &sync2Features,
 		.queueCreateInfoCount = 1,
 		.pQueueCreateInfos = &queueInfo,
 		.enabledExtensionCount = DeviceExtensionCount,
@@ -766,6 +808,11 @@ void VulkanContext::AllocateDescriptorSet()
 
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to allocate Vulkan descriptor set");
 
+	UpdateDescriptorSet();
+}
+
+void VulkanContext::UpdateDescriptorSet() const
+{
 	VkDescriptorImageInfo imageInfo{
 		.imageView = _renderImageView->GetImageView(),
 		.imageLayout = VK_IMAGE_LAYOUT_GENERAL
@@ -782,4 +829,221 @@ void VulkanContext::AllocateDescriptorSet()
 	};
 
 	vkUpdateDescriptorSets(_device->GetDevice(), 1, &setWrite, 0, nullptr);
+}
+
+void VulkanContext::CreateSemaphores()
+{
+	VkSemaphoreCreateInfo semaphoreInfo{
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
+	};
+
+	VkDevice device{ _device->GetDevice() };
+	_imageAvailableSemaphore.emplace(device, &semaphoreInfo);
+	
+	_renderFinishedSemaphores.resize(_swapchainImages.size());
+	for (auto& semaphore : _renderFinishedSemaphores)
+	{
+		semaphore = std::make_unique<VulkanSemaphore>(device, &semaphoreInfo);
+	}
+}
+
+void VulkanContext::CreateFence()
+{
+	VkFenceCreateInfo fenceInfo{
+		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+		.flags = VK_FENCE_CREATE_SIGNALED_BIT
+	};
+
+	_inFlightFence.emplace(_device->GetDevice(), &fenceInfo);
+}
+
+void VulkanContext::BeginCommandBuffer() const
+{
+	VkCommandBufferBeginInfo beginInfo{
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
+	};
+
+	VkResult result{ vkBeginCommandBuffer(_commandBuffer, &beginInfo) };
+	if (result != VK_SUCCESS) throw std::runtime_error("Failed to begin Vulkan command buffer");
+}
+
+void VulkanContext::TransitionRenderImage() const
+{
+	VkImageMemoryBarrier2 memoryBarrier{
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+		.srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+		.srcAccessMask = VK_ACCESS_2_NONE,
+		.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+		.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+		.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+		.image = _renderImage->GetImage(),
+		.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+	};
+
+	VkDependencyInfo dependencyInfo{
+		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &memoryBarrier
+	};
+
+	vkCmdPipelineBarrier2(_commandBuffer, &dependencyInfo);
+}
+
+void VulkanContext::BindAndDispatchShader()
+{
+	vkCmdBindPipeline(_commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _pipeline->GetPipeline());
+	vkCmdBindDescriptorSets(_commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _pipelineLayout->GetPipelineLayout(), 0, 1, &_descriptorSet, 0, nullptr);
+
+	std::uint32_t workgroupsX{ (_renderImageExtent.width + 7) / 8 };
+	std::uint32_t workgroupsY{ (_renderImageExtent.height + 7) / 8 };
+	vkCmdDispatch(_commandBuffer, workgroupsX, workgroupsY, 1);
+}
+
+void VulkanContext::GetSwapchainImageIndex()
+{
+	VkResult result{ vkAcquireNextImageKHR(_device->GetDevice(), _swapchain->GetSwapchain(), UINT64_MAX,
+		_imageAvailableSemaphore->GetSemaphore(), VK_NULL_HANDLE, &_swapchainImageIndex) };
+
+	if (result != VK_SUCCESS) throw std::runtime_error("Failed to acquire next swapchain image index");
+}
+
+void VulkanContext::PrepareRenderImageForCopy() const
+{
+	VkImageMemoryBarrier2 memoryBarrier{
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+		.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+		.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+		.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+		.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
+		.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+		.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		.image = _renderImage->GetImage(),
+		.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+	};
+
+	VkDependencyInfo dependencyInfo{
+		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &memoryBarrier
+	};
+
+	vkCmdPipelineBarrier2(_commandBuffer, &dependencyInfo);
+}
+
+void VulkanContext::PrepareSwapchainImageForCopy() const
+{
+	VkImageMemoryBarrier2 memoryBarrier{
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+		.srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+		.srcAccessMask = VK_ACCESS_2_NONE,
+		.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+		.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+		.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		.image = _swapchainImages[_swapchainImageIndex],
+		.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+	};
+
+	VkDependencyInfo dependencyInfo{
+		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &memoryBarrier
+	};
+
+	vkCmdPipelineBarrier2(_commandBuffer, &dependencyInfo);
+}
+
+void VulkanContext::CopyRenderImageToSwapchain() const
+{
+	VkImageBlit region{
+		.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
+		.srcOffsets = { { 0, 0, 0 }, {
+			static_cast<std::int32_t>(_renderImageExtent.width),
+			static_cast<std::int32_t>(_renderImageExtent.height), 1 } },
+		.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
+		.dstOffsets = { { 0, 0, 0 }, {
+			static_cast<std::int32_t>(_swapchainExtent.width),
+			static_cast<std::int32_t>(_swapchainExtent.height), 1 } }
+	};
+
+	vkCmdBlitImage(_commandBuffer, _renderImage->GetImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		_swapchainImages[_swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region,
+		VK_FILTER_NEAREST);
+}
+
+void VulkanContext::PrepareSwapchainImageForPresent() const
+{
+	VkImageMemoryBarrier2 memoryBarrier{
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+		.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+		.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+		.dstStageMask = VK_PIPELINE_STAGE_2_NONE,
+		.dstAccessMask = VK_ACCESS_2_NONE,
+		.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+		.image = _swapchainImages[_swapchainImageIndex],
+		.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+	};
+
+	VkDependencyInfo dependencyInfo{
+		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &memoryBarrier
+	};
+
+	vkCmdPipelineBarrier2(_commandBuffer, &dependencyInfo);
+}
+
+void VulkanContext::SubmitCommandBuffer() const
+{
+	VkSemaphoreSubmitInfo waitInfo{
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+		.semaphore = _imageAvailableSemaphore->GetSemaphore(),
+		.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
+	};
+
+	VkSemaphoreSubmitInfo signalInfo{
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+		.semaphore = _renderFinishedSemaphores[_swapchainImageIndex]->GetSemaphore(),
+		.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
+	};
+
+	VkCommandBufferSubmitInfo cmdInfo{
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+		.commandBuffer = _commandBuffer
+	};
+
+	VkSubmitInfo2 submitInfo{
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+		.waitSemaphoreInfoCount = 1,
+		.pWaitSemaphoreInfos = &waitInfo,
+		.commandBufferInfoCount = 1,
+		.pCommandBufferInfos = &cmdInfo,
+		.signalSemaphoreInfoCount = 1,
+		.pSignalSemaphoreInfos = &signalInfo
+	};
+
+	VkResult result{ vkQueueSubmit2(_queue, 1, &submitInfo, _inFlightFence->GetFence()) };
+	
+	if (result != VK_SUCCESS) throw std::runtime_error("Failed to submit command buffer");
+}
+
+void VulkanContext::Present() const
+{
+	VkSwapchainKHR swapchain{ _swapchain->GetSwapchain() };
+	VkSemaphore renderFinished{ _renderFinishedSemaphores[_swapchainImageIndex]->GetSemaphore() };
+
+	VkPresentInfoKHR presentInfo{
+		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+		.waitSemaphoreCount = 1,
+		.pWaitSemaphores = &renderFinished,
+		.swapchainCount = 1,
+		.pSwapchains = &swapchain,
+		.pImageIndices = &_swapchainImageIndex
+	};
+
+	VkResult result{ vkQueuePresentKHR(_queue, &presentInfo) };
+
+	if (result != VK_SUCCESS) throw std::runtime_error("Failed to present swapchain image");
 }

@@ -19,6 +19,7 @@ int main()
 		while (!window.ShouldClose())
 		{
 			window.ProcessEvents();
+			vulkan.DrawFrame();
 		}
 
 		return 0;

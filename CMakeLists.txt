@@ -11,7 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(Celestial-Rays
 	src/main.cpp
 	src/Window.cpp
- "src/VulkanContext.cpp" "src/VulkanWrappers/VulkanInstance.cpp" "src/VulkanWrappers/VulkanDebugMessenger.cpp" "src/VulkanWrappers/VulkanResource.cpp" "src/VulkanWrappers/VulkanSurface.cpp" "src/VulkanWrappers/VulkanDevice.cpp" "src/VulkanWrappers/VulkanSwapchain.cpp" "src/VulkanWrappers/VulkanImage.cpp" "src/VulkanWrappers/VulkanImageView.cpp" "src/VulkanWrappers/VulkanDeviceMemory.cpp" "src/VulkanWrappers/VulkanCommandPool.cpp" "src/VulkanWrappers/VulkanShaderModule.cpp" "src/VulkanWrappers/VulkanDescriptorSetLayout.cpp" "src/VulkanWrappers/VulkanPipelineLayout.cpp"  "src/VulkanWrappers/VulkanComputePipeline.cpp" "src/VulkanWrappers/VulkanDescriptorPool.cpp")
+ "src/VulkanContext.cpp" "src/VulkanWrappers/VulkanInstance.cpp" "src/VulkanWrappers/VulkanDebugMessenger.cpp" "src/VulkanWrappers/VulkanResource.cpp" "src/VulkanWrappers/VulkanSurface.cpp" "src/VulkanWrappers/VulkanDevice.cpp" "src/VulkanWrappers/VulkanSwapchain.cpp" "src/VulkanWrappers/VulkanImage.cpp" "src/VulkanWrappers/VulkanImageView.cpp" "src/VulkanWrappers/VulkanDeviceMemory.cpp" "src/VulkanWrappers/VulkanCommandPool.cpp" "src/VulkanWrappers/VulkanShaderModule.cpp" "src/VulkanWrappers/VulkanDescriptorSetLayout.cpp" "src/VulkanWrappers/VulkanPipelineLayout.cpp"  "src/VulkanWrappers/VulkanComputePipeline.cpp" "src/VulkanWrappers/VulkanDescriptorPool.cpp" "src/VulkanWrappers/VulkanSemaphore.cpp" "src/VulkanWrappers/VulkanFence.cpp")
 
 target_sources(Celestial-Rays
 	PRIVATE

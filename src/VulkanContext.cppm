@@ -3,6 +3,7 @@ module;
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -20,6 +21,8 @@ public:
 	VulkanContext(const VulkanContext&) = delete;
 	VulkanContext& operator=(const VulkanContext&) = delete;
 
+	void DrawFrame();
+
 private:
 	const Window& _window;
 
@@ -35,6 +38,7 @@ private:
 	VkFormat _swapchainFormat{};
 	VkExtent2D _swapchainExtent{};
 	std::vector<VkImage> _swapchainImages;
+	std::uint32_t _swapchainImageIndex{ UINT32_MAX };
 
 	std::optional<VulkanDeviceMemory> _renderImageMemory;
 	std::optional<VulkanImage> _renderImage;
@@ -53,6 +57,10 @@ private:
 
 	std::optional<VulkanDescriptorPool> _descriptorPool;
 	VkDescriptorSet _descriptorSet{};
+
+	std::optional<VulkanSemaphore> _imageAvailableSemaphore;
+	std::vector<std::unique_ptr<VulkanSemaphore>> _renderFinishedSemaphores;
+	std::optional<VulkanFence> _inFlightFence;
 
 	void CreateInstance();
 	void CreateDebugMessenger();
@@ -75,4 +83,22 @@ private:
 
 	void CreateDescriptorPool();
 	void AllocateDescriptorSet();
+	void UpdateDescriptorSet() const;
+
+	void CreateSemaphores();
+	void CreateFence();
+
+	void BeginCommandBuffer() const;
+	void TransitionRenderImage() const;
+	void BindAndDispatchShader();
+
+	void GetSwapchainImageIndex();
+	
+	void PrepareRenderImageForCopy() const;
+	void PrepareSwapchainImageForCopy() const;
+	void CopyRenderImageToSwapchain() const;
+	void PrepareSwapchainImageForPresent() const;
+
+	void SubmitCommandBuffer() const;
+	void Present() const;
 };

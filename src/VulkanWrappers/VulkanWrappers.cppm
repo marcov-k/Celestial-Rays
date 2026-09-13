@@ -216,3 +216,31 @@ private:
 	VkDevice _device{};
 	VkDescriptorPool _descriptorPool{};
 };
+
+export class VulkanSemaphore : VulkanResource
+{
+public:
+	explicit VulkanSemaphore(VkDevice device, const VkSemaphoreCreateInfo* pCreateInfo,
+		std::optional<VkAllocationCallbacks> allocator = std::nullopt);
+	~VulkanSemaphore();
+
+	VkSemaphore GetSemaphore() const;
+
+private:
+	VkDevice _device{};
+	VkSemaphore _semaphore{};
+};
+
+export class VulkanFence : VulkanResource
+{
+public:
+	explicit VulkanFence(VkDevice device, const VkFenceCreateInfo* pCreateInfo,
+		std::optional<VkAllocationCallbacks> allocator = std::nullopt);
+	~VulkanFence();
+
+	VkFence GetFence() const;
+
+private:
+	VkDevice _device{};
+	VkFence _fence{};
+};
