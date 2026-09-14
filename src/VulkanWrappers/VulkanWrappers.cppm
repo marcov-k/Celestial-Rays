@@ -244,3 +244,26 @@ private:
 	VkDevice _device{};
 	VkFence _fence{};
 };
+
+export class VulkanBuffer : VulkanResource
+{
+public:
+	explicit VulkanBuffer(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size, VkBufferUsageFlags usage,
+		VkMemoryPropertyFlags memoryProperties, std::optional<VkAllocationCallbacks> bufferAllocator = std::nullopt,
+		std::optional<VkAllocationCallbacks> memoryAllocator = std::nullopt);
+	~VulkanBuffer();
+
+	VkBuffer GetBuffer() const;
+	VkDeviceSize GetSize() const;
+
+	void Write(const void* data, VkDeviceSize size, VkDeviceSize offset) const;
+
+private:
+	VkDevice _device{};
+	VkDeviceSize _size{};
+	VkBuffer _buffer{};
+	std::optional<VulkanDeviceMemory> _memory;
+
+	static std::uint32_t FindMemoryTypeIndex(const VkPhysicalDeviceMemoryProperties physicalMemoryProps,
+		const VkMemoryRequirements memoryReqs, const VkMemoryPropertyFlags memoryProps);
+};

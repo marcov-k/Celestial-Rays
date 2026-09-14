@@ -11,7 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(Celestial-Rays
 	src/main.cpp
 	src/Window.cpp
- "src/VulkanContext.cpp" "src/VulkanWrappers/VulkanInstance.cpp" "src/VulkanWrappers/VulkanDebugMessenger.cpp" "src/VulkanWrappers/VulkanResource.cpp" "src/VulkanWrappers/VulkanSurface.cpp" "src/VulkanWrappers/VulkanDevice.cpp" "src/VulkanWrappers/VulkanSwapchain.cpp" "src/VulkanWrappers/VulkanImage.cpp" "src/VulkanWrappers/VulkanImageView.cpp" "src/VulkanWrappers/VulkanDeviceMemory.cpp" "src/VulkanWrappers/VulkanCommandPool.cpp" "src/VulkanWrappers/VulkanShaderModule.cpp" "src/VulkanWrappers/VulkanDescriptorSetLayout.cpp" "src/VulkanWrappers/VulkanPipelineLayout.cpp"  "src/VulkanWrappers/VulkanComputePipeline.cpp" "src/VulkanWrappers/VulkanDescriptorPool.cpp" "src/VulkanWrappers/VulkanSemaphore.cpp" "src/VulkanWrappers/VulkanFence.cpp")
+ "src/VulkanContext.cpp" "src/VulkanWrappers/VulkanInstance.cpp" "src/VulkanWrappers/VulkanDebugMessenger.cpp" "src/VulkanWrappers/VulkanResource.cpp" "src/VulkanWrappers/VulkanSurface.cpp" "src/VulkanWrappers/VulkanDevice.cpp" "src/VulkanWrappers/VulkanSwapchain.cpp" "src/VulkanWrappers/VulkanImage.cpp" "src/VulkanWrappers/VulkanImageView.cpp" "src/VulkanWrappers/VulkanDeviceMemory.cpp" "src/VulkanWrappers/VulkanCommandPool.cpp" "src/VulkanWrappers/VulkanShaderModule.cpp" "src/VulkanWrappers/VulkanDescriptorSetLayout.cpp" "src/VulkanWrappers/VulkanPipelineLayout.cpp"  "src/VulkanWrappers/VulkanComputePipeline.cpp" "src/VulkanWrappers/VulkanDescriptorPool.cpp" "src/VulkanWrappers/VulkanSemaphore.cpp" "src/VulkanWrappers/VulkanFence.cpp" "src/VulkanWrappers/VulkanBuffer.cpp" "src/Renderer.cpp")
 
 target_sources(Celestial-Rays
 	PRIVATE
@@ -19,7 +19,7 @@ target_sources(Celestial-Rays
 		TYPE CXX_MODULES
 		FILES
 			src/Window.cppm
- "src/VulkanContext.cppm" "src/VulkanWrappers/VulkanWrappers.cppm")
+ "src/VulkanContext.cppm" "src/VulkanWrappers/VulkanWrappers.cppm" "src/Renderer.cppm" "src/Simulation/TestData.cppm")
 
 target_compile_definitions(Celestial-Rays PRIVATE
 	VK_USE_PLATFORM_WIN32_KHR

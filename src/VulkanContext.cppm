@@ -5,6 +5,8 @@ module;
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 export module Celestial.Vulkan;
@@ -21,7 +23,42 @@ public:
 	VulkanContext(const VulkanContext&) = delete;
 	VulkanContext& operator=(const VulkanContext&) = delete;
 
-	void DrawFrame();
+	[[nodiscard]]
+	bool BeginFrame();
+	[[nodiscard]]
+	bool EndFrame();
+
+	const VulkanImageView& GetRenderImageView() const;
+	const VkExtent2D& GetRenderImageExtent() const;
+	VkCommandBuffer GetCommandBuffer() const;
+
+	std::unique_ptr<VulkanBuffer> CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
+		VkMemoryPropertyFlags memoryProperties, std::optional<VkAllocationCallbacks> bufferAllocator = std::nullopt,
+		std::optional<VkAllocationCallbacks> memoryAllocator = std::nullopt) const;
+
+	std::unique_ptr<VulkanDescriptorSetLayout> CreateDescriptorSetLayout(const std::vector<VkDescriptorSetLayoutBinding>& bindings,
+		std::optional<VkAllocationCallbacks> allocator = std::nullopt) const;
+
+	std::unique_ptr<VulkanShaderModule> CreateShaderModule(const std::string_view shaderName,
+		std::optional<VkAllocationCallbacks> allocator = std::nullopt) const;
+
+	std::unique_ptr<VulkanPipelineLayout> CreatePipelineLayout(const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts,
+		const std::vector<VkPushConstantRange>& pushConstantRanges,
+		std::optional<VkAllocationCallbacks> allocator = std::nullopt) const;
+
+	std::unique_ptr<VulkanComputePipeline> CreateComputePipeline(const VulkanShaderModule& shaderModule,
+		const VulkanPipelineLayout& pipelineLayout, std::optional<VkAllocationCallbacks> allocator = std::nullopt) const;
+
+	std::unique_ptr<VulkanDescriptorPool> CreateDescriptorPool(const std::vector<VkDescriptorPoolSize>& descriptorPoolSizes,
+		std::uint32_t maxSets, std::optional<VkAllocationCallbacks> allocator = std::nullopt) const;
+
+	VkDescriptorSet AllocateDescriptorSet(const VulkanDescriptorPool& descriptorPool, const VulkanDescriptorSetLayout& descriptorSetLayout) const;
+
+	std::vector<VkDescriptorSet> AllocateDescriptorSets(const VulkanDescriptorPool& descriptorPool,
+		const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts) const;
+
+	void UpdateDescriptorSet(const VkWriteDescriptorSet& writeDescriptorSet) const;
+	void UpdateDescriptorSets(const std::vector<VkWriteDescriptorSet>& writeDescriptorSets) const;
 
 private:
 	const Window& _window;
@@ -49,15 +86,6 @@ private:
 	std::optional<VulkanCommandPool> _commandPool;
 	VkCommandBuffer _commandBuffer{};
 
-	std::optional<VulkanShaderModule> _shaderModule;
-
-	std::optional<VulkanDescriptorSetLayout> _descriptorSetLayout;
-	std::optional<VulkanPipelineLayout> _pipelineLayout;
-	std::optional<VulkanComputePipeline> _pipeline;
-
-	std::optional<VulkanDescriptorPool> _descriptorPool;
-	VkDescriptorSet _descriptorSet{};
-
 	std::optional<VulkanSemaphore> _imageAvailableSemaphore;
 	std::vector<std::unique_ptr<VulkanSemaphore>> _renderFinishedSemaphores;
 	std::optional<VulkanFence> _inFlightFence;
@@ -76,23 +104,12 @@ private:
 	void CreateCommandPool();
 	void AllocateCommandBuffer();
 
-	void CreateShaderModule();
-
-	void CreateDescriptorSetLayout();
-	void CreatePipelineLayout();
-	void CreatePipeline();
-
-	void CreateDescriptorPool();
-	void AllocateDescriptorSet();
-	void UpdateDescriptorSet() const;
-
 	void CreateSemaphores();
 	void CreateRenderSemaphores();
 	void CreateFence();
 
 	void BeginCommandBuffer() const;
 	void TransitionRenderImage() const;
-	void BindAndDispatchShader();
 
 	bool GetSwapchainImageIndex();
 	

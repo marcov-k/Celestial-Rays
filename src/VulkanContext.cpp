@@ -10,6 +10,7 @@ module;
 #include <optional>
 #include <print>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 module Celestial.Vulkan;
@@ -315,7 +316,7 @@ namespace
 		throw std::runtime_error("Failed to find suitable Vulkan memory type");
 	}
 
-	std::vector<std::uint32_t> GetShaderBinary(const std::string& shaderName)
+	std::vector<std::uint32_t> GetShaderBinary(const std::string_view shaderName)
 	{
 		std::string path{ std::format("{}/{}.comp.spv", CELESTIAL_SHADER_DIR, shaderName) };
 
@@ -382,15 +383,6 @@ VulkanContext::VulkanContext(const Window& window) : _window(window)
 	CreateCommandPool();
 	AllocateCommandBuffer();
 
-	CreateShaderModule();
-
-	CreateDescriptorSetLayout();
-	CreatePipelineLayout();
-	CreatePipeline();
-
-	CreateDescriptorPool();
-	AllocateDescriptorSet();
-
 	CreateSemaphores();
 	CreateFence();
 }
@@ -400,7 +392,7 @@ VulkanContext::~VulkanContext()
 	vkDeviceWaitIdle(_device->GetDevice());
 }
 
-void VulkanContext::DrawFrame()
+bool VulkanContext::BeginFrame()
 {
 	VkDevice device{ _device->GetDevice() };
 	VkFence fence{ _inFlightFence->GetFence() };
@@ -408,7 +400,7 @@ void VulkanContext::DrawFrame()
 	VkResult result{ vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX) };
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to wait for in-flight fence");
 
-	if (!GetSwapchainImageIndex()) return; // swapchain just recreated - retry next frame
+	if (!GetSwapchainImageIndex()) return false;
 
 	result = vkResetFences(device, 1, &fence);
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to reset in-flight fence");
@@ -418,18 +410,170 @@ void VulkanContext::DrawFrame()
 
 	BeginCommandBuffer();
 	TransitionRenderImage();
-	BindAndDispatchShader();
+	
+	return true;
+}
 
+bool VulkanContext::EndFrame()
+{
 	PrepareRenderImageForCopy();
 	PrepareSwapchainImageForCopy();
 	CopyRenderImageToSwapchain();
 	PrepareSwapchainImageForPresent();
 
-	result = vkEndCommandBuffer(_commandBuffer);
+	VkResult result{ vkEndCommandBuffer(_commandBuffer) };
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to end command buffer");
 
 	SubmitCommandBuffer();
-	if (!Present()) RecreateSwapchain();
+	if (!Present())
+	{
+		RecreateSwapchain();
+		return false;
+	}
+
+	return true;
+}
+
+const VulkanImageView& VulkanContext::GetRenderImageView() const
+{
+	return _renderImageView.value();
+}
+
+const VkExtent2D& VulkanContext::GetRenderImageExtent() const
+{
+	return _renderImageExtent;
+}
+
+VkCommandBuffer VulkanContext::GetCommandBuffer() const
+{
+	return _commandBuffer;
+}
+
+std::unique_ptr<VulkanBuffer> VulkanContext::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
+	VkMemoryPropertyFlags memoryProperties, std::optional<VkAllocationCallbacks> bufferAllocator,
+	std::optional<VkAllocationCallbacks> memoryAllocator) const
+{
+	return std::make_unique<VulkanBuffer>(_physicalDevice, _device->GetDevice(), size, usage,
+		memoryProperties, bufferAllocator, memoryAllocator);
+}
+
+std::unique_ptr<VulkanDescriptorSetLayout> VulkanContext::CreateDescriptorSetLayout(const std::vector<VkDescriptorSetLayoutBinding>& bindings,
+	std::optional<VkAllocationCallbacks> allocator) const
+{
+	VkDescriptorSetLayoutCreateInfo layoutInfo{
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		.bindingCount = (std::uint32_t)bindings.size(),
+		.pBindings = bindings.data()
+	};
+
+	return std::make_unique<VulkanDescriptorSetLayout>(_device->GetDevice(), &layoutInfo, allocator);
+}
+
+std::unique_ptr<VulkanPipelineLayout> VulkanContext::CreatePipelineLayout(const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts,
+	const std::vector<VkPushConstantRange>& pushConstantRanges, std::optional<VkAllocationCallbacks> allocator) const
+{
+	VkPipelineLayoutCreateInfo layoutInfo{
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+		.setLayoutCount = (std::uint32_t)descriptorSetLayouts.size(),
+		.pSetLayouts = descriptorSetLayouts.data(),
+		.pushConstantRangeCount = (std::uint32_t)pushConstantRanges.size(),
+		.pPushConstantRanges = pushConstantRanges.data()
+	};
+
+	return std::make_unique<VulkanPipelineLayout>(_device->GetDevice(), &layoutInfo, allocator);
+}
+
+std::unique_ptr<VulkanShaderModule> VulkanContext::CreateShaderModule(const std::string_view shaderName,
+	std::optional<VkAllocationCallbacks> allocator) const
+{
+	auto code = GetShaderBinary(shaderName);
+
+	VkShaderModuleCreateInfo moduleInfo{
+		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+		.codeSize = code.size() * sizeof(std::uint32_t),
+		.pCode = code.data()
+	};
+
+	return std::make_unique<VulkanShaderModule>(_device->GetDevice(), &moduleInfo, allocator);
+}
+
+std::unique_ptr<VulkanComputePipeline> VulkanContext::CreateComputePipeline(const VulkanShaderModule& shaderModule,
+	const VulkanPipelineLayout& pipelineLayout, std::optional<VkAllocationCallbacks> allocator) const
+{
+	VkPipelineShaderStageCreateInfo shaderStageInfo{
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+	.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+	.module = shaderModule.GetShaderModule(),
+	.pName = "main"
+	};
+
+	VkComputePipelineCreateInfo pipelineInfo{
+		.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+		.stage = shaderStageInfo,
+		.layout = pipelineLayout.GetPipelineLayout(),
+		.basePipelineHandle = VK_NULL_HANDLE,
+		.basePipelineIndex = -1
+	};
+
+	return std::make_unique<VulkanComputePipeline>(_device->GetDevice(), &pipelineInfo, allocator);
+}
+
+std::unique_ptr<VulkanDescriptorPool> VulkanContext::CreateDescriptorPool(const std::vector<VkDescriptorPoolSize>& descriptorPoolSizes,
+	std::uint32_t maxSets, std::optional<VkAllocationCallbacks> allocator) const
+{
+	VkDescriptorPoolCreateInfo poolInfo{
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+		.maxSets = maxSets,
+		.poolSizeCount = (std::uint32_t)descriptorPoolSizes.size(),
+		.pPoolSizes = descriptorPoolSizes.data()
+	};
+
+	return std::make_unique<VulkanDescriptorPool>(_device->GetDevice(), &poolInfo, allocator);
+}
+
+VkDescriptorSet VulkanContext::AllocateDescriptorSet(const VulkanDescriptorPool& descriptorPool, const VulkanDescriptorSetLayout& descriptorSetLayout) const
+{
+	VkDescriptorSetLayout setLayout{ descriptorSetLayout.GetDescriptorSetLayout() };
+
+	VkDescriptorSetAllocateInfo setInfo{
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.descriptorPool = descriptorPool.GetDescriptorPool(),
+		.descriptorSetCount = 1,
+		.pSetLayouts = &setLayout
+	};
+
+	VkDescriptorSet descriptorSet{};
+	VkResult result{ vkAllocateDescriptorSets(_device->GetDevice(), &setInfo, &descriptorSet) };
+	if (result != VK_SUCCESS) throw std::runtime_error("Failed to allocate descriptor set");
+
+	return descriptorSet;
+}
+
+std::vector<VkDescriptorSet> VulkanContext::AllocateDescriptorSets(const VulkanDescriptorPool& descriptorPool,
+	const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts) const
+{
+	VkDescriptorSetAllocateInfo setInfo{
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.descriptorPool = descriptorPool.GetDescriptorPool(),
+		.descriptorSetCount = (std::uint32_t)descriptorSetLayouts.size(),
+		.pSetLayouts = descriptorSetLayouts.data()
+	};
+
+	std::vector<VkDescriptorSet> descriptorSets(descriptorSetLayouts.size());
+	VkResult result{ vkAllocateDescriptorSets(_device->GetDevice(), &setInfo, descriptorSets.data()) };
+	if (result != VK_SUCCESS) throw std::runtime_error("Failed to allocate descriptor sets");
+
+	return descriptorSets;
+}
+
+void VulkanContext::UpdateDescriptorSet(const VkWriteDescriptorSet& writeDescriptorSet) const
+{
+	vkUpdateDescriptorSets(_device->GetDevice(), 1, &writeDescriptorSet, 0, nullptr);
+}
+
+void VulkanContext::UpdateDescriptorSets(const std::vector<VkWriteDescriptorSet>& writeDescriptorSets) const
+{
+	vkUpdateDescriptorSets(_device->GetDevice(), writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
 }
 
 void VulkanContext::CreateInstance()
@@ -690,7 +834,6 @@ void VulkanContext::RecreateSwapchain()
 
 	CreateSwapchain();
 	CreateRenderImage();
-	UpdateDescriptorSet();
 
 	if (_renderFinishedSemaphores.size() != _swapchainImages.size())
 	{
@@ -722,124 +865,6 @@ void VulkanContext::AllocateCommandBuffer()
 	VkResult result{ vkAllocateCommandBuffers(_device->GetDevice(), &bufferInfo, &_commandBuffer) };
 
 	if (result != VK_SUCCESS) throw std::runtime_error("Failed to allocate command buffer");
-}
-
-void VulkanContext::CreateShaderModule()
-{
-	auto code = GetShaderBinary("gradient");
-
-	VkShaderModuleCreateInfo moduleInfo{
-		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = code.size() * sizeof(std::uint32_t),
-		.pCode = code.data()
-	};
-
-	_shaderModule.emplace(_device->GetDevice(), &moduleInfo);
-}
-
-void VulkanContext::CreateDescriptorSetLayout()
-{
-	VkDescriptorSetLayoutBinding binding{
-		.binding = 0,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-	};
-
-	VkDescriptorSetLayoutCreateInfo layoutInfo{
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = 1,
-		.pBindings = &binding
-	};
-
-	_descriptorSetLayout.emplace(_device->GetDevice(), &layoutInfo);
-}
-
-void VulkanContext::CreatePipelineLayout()
-{
-	VkDescriptorSetLayout setLayout{ _descriptorSetLayout->GetDescriptorSetLayout() };
-	VkPipelineLayoutCreateInfo layoutInfo{
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-		.setLayoutCount = 1,
-		.pSetLayouts = &setLayout
-	};
-
-	_pipelineLayout.emplace(_device->GetDevice(), &layoutInfo);
-}
-
-void VulkanContext::CreatePipeline()
-{
-	VkPipelineShaderStageCreateInfo shaderStageInfo{
-		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-		.stage = VK_SHADER_STAGE_COMPUTE_BIT,
-		.module = _shaderModule->GetShaderModule(),
-		.pName = "main"
-	};
-
-	VkComputePipelineCreateInfo pipelineInfo{
-		.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-		.stage = shaderStageInfo,
-		.layout = _pipelineLayout->GetPipelineLayout(),
-		.basePipelineHandle = VK_NULL_HANDLE,
-		.basePipelineIndex = -1
-	};
-
-	_pipeline.emplace(_device->GetDevice(), &pipelineInfo);
-}
-
-void VulkanContext::CreateDescriptorPool()
-{
-	VkDescriptorPoolSize poolSize{
-		.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-		.descriptorCount = 1
-	};
-
-	VkDescriptorPoolCreateInfo poolInfo{
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.maxSets = 1,
-		.poolSizeCount = 1,
-		.pPoolSizes = &poolSize
-	};
-
-	_descriptorPool.emplace(_device->GetDevice(), &poolInfo);
-}
-
-void VulkanContext::AllocateDescriptorSet()
-{
-	VkDescriptorSetLayout setLayout{ _descriptorSetLayout->GetDescriptorSetLayout() };
-
-	VkDescriptorSetAllocateInfo setInfo{
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.descriptorPool = _descriptorPool->GetDescriptorPool(),
-		.descriptorSetCount = 1,
-		.pSetLayouts = &setLayout
-	};
-
-	VkResult result{ vkAllocateDescriptorSets(_device->GetDevice(), &setInfo, &_descriptorSet) };
-
-	if (result != VK_SUCCESS) throw std::runtime_error("Failed to allocate Vulkan descriptor set");
-
-	UpdateDescriptorSet();
-}
-
-void VulkanContext::UpdateDescriptorSet() const
-{
-	VkDescriptorImageInfo imageInfo{
-		.imageView = _renderImageView->GetImageView(),
-		.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-	};
-
-	VkWriteDescriptorSet setWrite{
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = _descriptorSet,
-		.dstBinding = 0,
-		.dstArrayElement = 0,
-		.descriptorCount = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-		.pImageInfo = &imageInfo
-	};
-
-	vkUpdateDescriptorSets(_device->GetDevice(), 1, &setWrite, 0, nullptr);
 }
 
 void VulkanContext::CreateSemaphores()
@@ -909,16 +934,6 @@ void VulkanContext::TransitionRenderImage() const
 	};
 
 	vkCmdPipelineBarrier2(_commandBuffer, &dependencyInfo);
-}
-
-void VulkanContext::BindAndDispatchShader()
-{
-	vkCmdBindPipeline(_commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _pipeline->GetPipeline());
-	vkCmdBindDescriptorSets(_commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _pipelineLayout->GetPipelineLayout(), 0, 1, &_descriptorSet, 0, nullptr);
-
-	std::uint32_t workgroupsX{ (_renderImageExtent.width + 7) / 8 };
-	std::uint32_t workgroupsY{ (_renderImageExtent.height + 7) / 8 };
-	vkCmdDispatch(_commandBuffer, workgroupsX, workgroupsY, 1);
 }
 
 bool VulkanContext::GetSwapchainImageIndex()
