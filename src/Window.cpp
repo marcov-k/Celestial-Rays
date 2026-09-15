@@ -132,8 +132,8 @@ SimulationInput Window::GetSimulationInput()
 	_mouseDeltaY = 0;
 
 	float forward{};
-	if (_keys['W']) forward -= 1.0f;
-	if (_keys['S']) forward += 1.0f;
+	if (_keys['W']) forward += 1.0f;
+	if (_keys['S']) forward -= 1.0f;
 
 	float up{};
 	if (_keys['E']) up += 1.0f;
