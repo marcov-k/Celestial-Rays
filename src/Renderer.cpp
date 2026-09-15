@@ -3,6 +3,7 @@ module;
 #include <vulkan/vulkan.h>
 
 #include <cstdint>
+#include <print>
 
 module Celestial.Rendering;
 
@@ -23,11 +24,13 @@ Renderer::Renderer(VulkanContext& context) : _context(context)
 
 Renderer::~Renderer() { }
 
-void Renderer::Render(float time, const TestData& testData)
+void Renderer::Render(const SimulationGPUState& simulationState)
 {
 	if (!_context.BeginFrame()) return;
 
-	_testDataBuffer->Write(&testData, sizeof(TestData), 0);
+	std::println("Camera position: {}, {}, {}", simulationState.cameraData.position.x, simulationState.cameraData.position.y, simulationState.cameraData.position.z);
+
+	_cameraBuffer->Write(&simulationState.cameraData, sizeof(CameraGPUData), 0);
 
 	VkCommandBuffer commandBuffer{ _context.GetCommandBuffer() };
 	const VkExtent2D& renderImageExtent{ _context.GetRenderImageExtent() };
@@ -37,9 +40,7 @@ void Renderer::Render(float time, const TestData& testData)
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _pipelineLayout->GetPipelineLayout(),
 		0, 1, &_descriptorSet, 0, nullptr);
 
-	vkCmdPushConstants(commandBuffer, _pipelineLayout->GetPipelineLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(float), &time);
-
-	std::uint32_t workGroupsX{ (renderImageExtent.width + 7) / 8};
+	std::uint32_t workGroupsX{ (renderImageExtent.width + 7) / 8 };
 	std::uint32_t workGroupsY{ (renderImageExtent.height + 7) / 8 };
 	vkCmdDispatch(commandBuffer, workGroupsX, workGroupsY, 1);
 
@@ -48,7 +49,7 @@ void Renderer::Render(float time, const TestData& testData)
 
 void Renderer::CreateShaderModule()
 {
-	_shaderModule = _context.CreateShaderModule("gradient");
+	_shaderModule = _context.CreateShaderModule("raytracer");
 }
 
 void Renderer::CreateDescriptorSetLayout()
@@ -92,13 +93,7 @@ void Renderer::AllocateDescriptorSet()
 
 void Renderer::CreatePipelineLayout()
 {
-	VkPushConstantRange constantRange{
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.offset = 0,
-		.size = sizeof(float)
-	};
-
-	_pipelineLayout = _context.CreatePipelineLayout({ _descriptorLayout->GetDescriptorSetLayout() }, { constantRange });
+	_pipelineLayout = _context.CreatePipelineLayout({ _descriptorLayout->GetDescriptorSetLayout() }, { });
 }
 
 void Renderer::CreatePipeline()
@@ -108,7 +103,7 @@ void Renderer::CreatePipeline()
 
 void Renderer::AllocateBuffers()
 {
-	_testDataBuffer = _context.CreateBuffer(sizeof(TestData), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+	_cameraBuffer = _context.CreateBuffer(sizeof(CameraGPUData), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 }
 
@@ -128,10 +123,10 @@ void Renderer::UpdateDescriptorSet() const
 		.pImageInfo = &renderImageInfo
 	};
 
-	VkDescriptorBufferInfo testDataBufferInfo{
-		.buffer = _testDataBuffer->GetBuffer(),
+	VkDescriptorBufferInfo cameraBufferInfo{
+		.buffer = _cameraBuffer->GetBuffer(),
 		.offset = 0,
-		.range = sizeof(TestData)
+		.range = sizeof(CameraGPUData)
 	};
 
 	VkWriteDescriptorSet writeTestDataBuffer{
@@ -140,7 +135,7 @@ void Renderer::UpdateDescriptorSet() const
 		.dstBinding = 1,
 		.descriptorCount = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.pBufferInfo = &testDataBufferInfo
+		.pBufferInfo = &cameraBufferInfo
 	};
 
 	_context.UpdateDescriptorSets({ writeRenderImage, writeTestDataBuffer });

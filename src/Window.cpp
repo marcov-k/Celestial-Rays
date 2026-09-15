@@ -3,6 +3,7 @@ module;
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <windowsx.h>
 
 #include <cstdint>
 #include <stdexcept>
@@ -88,6 +89,18 @@ LRESULT CALLBACK Window::WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
 			SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
 			window->_hwnd = nullptr;
 			break;
+
+		case WM_KEYDOWN:
+			window->_keys[wParam] = true;
+			return 0;
+
+		case WM_KEYUP:
+			window->_keys[wParam] = false;
+			return 0;
+
+		case WM_MOUSEMOVE:
+			window->HandleMouseMove(lParam);
+			return 0;
 		}
 	}
 
@@ -103,11 +116,34 @@ void Window::ProcessEvents()
 		if (message.message == WM_QUIT)
 		{
 			_shouldClose = true;
+			continue;
 		}
 
 		TranslateMessage(&message);
 		DispatchMessage(&message);
 	}
+}
+
+SimulationInput Window::GetSimulationInput()
+{
+	float mouseDeltaX{ static_cast<float>(_mouseDeltaX) };
+	float mouseDeltaY{ static_cast<float>(_mouseDeltaY) };
+	_mouseDeltaX = 0;
+	_mouseDeltaY = 0;
+
+	float forward{};
+	if (_keys['W']) forward -= 1.0f;
+	if (_keys['S']) forward += 1.0f;
+
+	float up{};
+	if (_keys['E']) up += 1.0f;
+	if (_keys['Q']) up -= 1.0f;
+
+	float right{};
+	if (_keys['D']) right += 1.0f;
+	if (_keys['A']) right -= 1.0f;
+
+	return { _width, _height, mouseDeltaX, mouseDeltaY, forward, up, right };
 }
 
 bool Window::ShouldClose() const noexcept
@@ -143,4 +179,20 @@ HWND Window::Handle() const noexcept
 HINSTANCE Window::Instance() const noexcept
 {
 	return _instance;
+}
+
+void Window::HandleMouseMove(LPARAM lParam)
+{
+	int newX{ GET_X_LPARAM(lParam) };
+	int newY{ GET_Y_LPARAM(lParam) };
+
+	if (_haveMousePosition)
+	{
+		_mouseDeltaX += newX - _mouseX;
+		_mouseDeltaY += newY - _mouseY;
+	}
+
+	_mouseX = newX;
+	_mouseY = newY;
+	_haveMousePosition = true;
 }

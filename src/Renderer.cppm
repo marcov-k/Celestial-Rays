@@ -7,10 +7,11 @@ module;
 
 export module Celestial.Rendering;
 
-import Celestial.Simulation.TestData;
+import Celestial.GPUDatatypes;
+import Celestial.Simulation;
+import Celestial.Simulation.Camera;
 import Celestial.Vulkan;
 import Celestial.Vulkan.Wrappers;
-import Celestial.Window;
 
 export class Renderer
 {
@@ -18,14 +19,14 @@ public:
 	explicit Renderer(VulkanContext& vulkanContext);
 	~Renderer();
 
-	void Render(float time, const TestData& testData);
+	void Render(const SimulationGPUState& simulationState);
 
 private:
 	VulkanContext& _context;
 
 	std::unique_ptr<VulkanShaderModule> _shaderModule;
 
-	std::unique_ptr<VulkanBuffer> _testDataBuffer;
+	std::unique_ptr<VulkanBuffer> _cameraBuffer;
 
 	std::unique_ptr<VulkanDescriptorSetLayout> _descriptorLayout;
 	std::unique_ptr<VulkanDescriptorPool> _descriptorPool;

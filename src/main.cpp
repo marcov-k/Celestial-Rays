@@ -2,37 +2,50 @@
 
 #include <vulkan/vulkan.h>
 
+#include <glm/glm.hpp>
+
 #include <chrono>
+#include <numbers>
 #include <print>
 #include <stdexcept>
 
-import Celestial.Simulation.TestData;
+import Celestial.Simulation;
 import Celestial.Rendering;
 import Celestial.Vulkan;
 import Celestial.Window;
 
 int main()
 {
+	const static std::uint32_t WindowWidth{ 1920 };
+	const static std::uint32_t WindowHeight{ 1080 };
+	const static float FieldOfView{ std::numbers::pi_v<float> / 3.0f };
+
 	try
 	{
 		HINSTANCE instance = GetModuleHandleW(nullptr);
-		Window window(instance, 1920, 1080, L"Celestial-Rays");
+		Window window(instance, WindowWidth, WindowHeight, L"Celestial-Rays");
 		VulkanContext vulkan{ window };
 		Renderer renderer{ vulkan };
+		Simulation simulation{ FieldOfView, WindowWidth, WindowHeight };
 
-		TestData testData{ 1.0f, 0.25f, 0.5f };
-
-		auto startTime = std::chrono::steady_clock::now();
+		auto previousTime{ std::chrono::steady_clock::now() };
 
 		while (!window.ShouldClose())
 		{
 			window.ProcessEvents();
+			auto simulationInput{ window.GetSimulationInput() };
+
+			auto currentTime{ std::chrono::steady_clock::now() };
+
+			float deltaTime{ std::chrono::duration<float>(currentTime - previousTime).count() };
+
+			previousTime = currentTime;
 
 			if (window.Width() == 0 || window.Height() == 0) continue;
 
-			float time = std::chrono::duration<float>(std::chrono::steady_clock::now() - startTime).count();
+			simulation.StepSimulation(deltaTime, simulationInput);
 
-			renderer.Render(time, testData);
+			renderer.Render(simulation.GetGPUState());
 		}
 
 		return 0;

@@ -1,0 +1,41 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0, rgba8) uniform writeonly image2D outputImage;
+
+struct CameraData
+{
+	vec4 position;
+	vec4 forward;
+	vec4 up;
+	vec4 right;
+	float planeWidth;
+	float planeHeight;
+};
+
+layout(std430, binding = 1) readonly buffer CameraDataBuffer
+{
+	CameraData cameraInfo;
+};
+
+void main()
+{
+	uvec2 pixel = gl_GlobalInvocationID.xy;
+
+	ivec2 imageDims = imageSize(outputImage);
+
+	if (pixel.x >= imageDims.x || pixel.y >= imageDims.y) return;
+
+	vec2 pixelNorm = (vec2(pixel) + 0.5) / vec2(imageDims);
+	pixelNorm = (pixelNorm - 0.5) * 2.0;
+	pixelNorm.y *= -1.0;
+
+	vec2 pixelDisplacement = vec2(pixelNorm.x * (cameraInfo.planeWidth / 2.0), pixelNorm.y * (cameraInfo.planeHeight / 2.0));
+	vec3 rayDir = cameraInfo.forward.xyz + pixelDisplacement.x * cameraInfo.right.xyz + pixelDisplacement.y * cameraInfo.up.xyz;
+	rayDir = normalize(rayDir);
+
+	// Draw direction to screen for visualization
+	vec4 color = vec4(rayDir * 0.5 + 0.5, 1.0);
+	imageStore(outputImage, ivec2(pixel), color);
+}

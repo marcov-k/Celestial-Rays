@@ -4,9 +4,12 @@ module;
 #define NOMINMAX
 #include <windows.h>
 
+#include <array>
 #include <cstdint>
 
 export module Celestial.Window;
+
+import Celestial.Simulation.Input;
 
 export class Window
 {
@@ -18,6 +21,7 @@ public:
 	Window& operator=(const Window&) = delete;
 
 	void ProcessEvents();
+	SimulationInput GetSimulationInput();
 
 	[[nodiscard]]
 	bool ShouldClose() const noexcept;
@@ -43,4 +47,12 @@ private:
 	std::uint32_t _height{};
 	bool _shouldClose{};
 	bool _resized{};
+	bool _haveMousePosition{ false };
+	int _mouseX{};
+	int _mouseY{};
+	int _mouseDeltaX{};
+	int _mouseDeltaY{};
+	std::array<bool, 256> _keys{};
+
+	void HandleMouseMove(LPARAM lParam);
 };
