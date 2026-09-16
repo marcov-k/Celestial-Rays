@@ -33,7 +33,7 @@ void Simulation::StepSimulation(float deltaTime, const SimulationInput& userInpu
 	glm::vec3& cameraPosition{ _camera->GetPosition() };
 	CameraBasisVectors basisVectors{ _camera->GetBasisVectors() };
 
-	glm::vec3 movement{ basisVectors.forward * userInput.forward + basisVectors.right * userInput.right + WORLD_UP * userInput.up };
+	glm::vec3 movement{ basisVectors.forward * userInput.forward + basisVectors.up * userInput.up + basisVectors.right * userInput.right };
 	if (glm::length(movement) > 0.0f)
 	{
 		movement = glm::normalize(movement);

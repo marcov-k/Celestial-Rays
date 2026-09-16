@@ -13,6 +13,9 @@ module Celestial.Window;
 Window::Window(HINSTANCE instance, std::uint32_t width, std::uint32_t height, const wchar_t* title)
 	: _instance(instance), _width(width), _height(height)
 {
+	_mouseX = width / 2;
+	_mouseY = height / 2;
+
 	WNDCLASSW windowClass{};
 	windowClass.lpfnWndProc = &Window::WindowProc;
 	windowClass.hInstance = _instance;

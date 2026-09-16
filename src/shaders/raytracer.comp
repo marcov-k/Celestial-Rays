@@ -19,6 +19,84 @@ layout(std430, binding = 1) readonly buffer CameraDataBuffer
 	CameraData cameraInfo;
 };
 
+struct Sphere
+{
+	float radius;
+	vec3 position;
+};
+
+struct Ray
+{
+	vec3 origin;
+	vec3 direction;
+};
+
+struct IntersectPoint
+{
+	bool hit;
+	float dist;
+	vec3 position;
+};
+
+struct IntersectInfo
+{
+	bool hit;
+	IntersectPoint point;
+	vec3 surfaceNormal;
+	vec3 lightNormal;
+};
+
+Sphere testSpheres[2] = Sphere[2](Sphere(2.0, vec3(0.0, 0.0, -5.0)), Sphere(1.0, vec3(3.0, 1.0, -3.0)));
+vec3 lightSourcePosition = vec3(10.0, 5.0, 20.0);
+
+IntersectPoint CheckIntersect(Ray ray, Sphere sphere)
+{
+	vec3 op = ray.origin - sphere.position;
+
+	float b = 2 * dot(ray.direction, op);
+	float c = dot(op, op) - sphere.radius * sphere.radius;
+	float discriminant = b * b - 4 * c;
+
+	if (discriminant < 0.0) return IntersectPoint(false, 0.0, vec3(0.0));
+
+	float hitDist = (-b - sqrt(discriminant)) / 2.0;
+	vec3 intersectPoint;
+	if (hitDist > 0.0)
+	{
+		intersectPoint = ray.origin + hitDist * ray.direction;
+	}
+	else
+	{
+		hitDist = (-b + sqrt(discriminant)) / 2.0;
+		if (hitDist <= 0.0) return IntersectPoint(false, 0.0, vec3(0.0));
+		intersectPoint = ray.origin + hitDist * ray.direction;
+	}
+
+	return IntersectPoint(true, hitDist, intersectPoint);
+}
+
+vec3 Normal(vec3 point, vec3 center)
+{
+	return normalize(point - center);
+}
+
+IntersectInfo FindClosestIntersect(Ray ray)
+{
+	IntersectInfo closestIntersect = IntersectInfo(false, IntersectPoint(false, 0.0, vec3(0.0)), vec3(0.0), vec3(0.0));
+	float closestDist = 3.402823466e+38;
+	for (uint s = 0; s < testSpheres.length(); s++)
+	{
+		IntersectPoint intersect = CheckIntersect(ray, testSpheres[s]);
+		if (intersect.hit && intersect.dist < closestDist)
+		{
+			closestDist = intersect.dist;
+			closestIntersect = IntersectInfo(true, intersect, Normal(intersect.position, testSpheres[s].position), Normal(lightSourcePosition, intersect.position));
+		}
+	}
+	
+	return closestIntersect;
+}
+
 void main()
 {
 	uvec2 pixel = gl_GlobalInvocationID.xy;
@@ -34,8 +112,16 @@ void main()
 	vec2 pixelDisplacement = vec2(pixelNorm.x * (cameraInfo.planeWidth / 2.0), pixelNorm.y * (cameraInfo.planeHeight / 2.0));
 	vec3 rayDir = cameraInfo.forward.xyz + pixelDisplacement.x * cameraInfo.right.xyz + pixelDisplacement.y * cameraInfo.up.xyz;
 	rayDir = normalize(rayDir);
+	Ray ray = Ray(cameraInfo.position.xyz, rayDir);
 
-	// Draw direction to screen for visualization
-	vec4 color = vec4(rayDir * 0.5 + 0.5, 1.0);
+	IntersectInfo intersect = FindClosestIntersect(ray);
+
+	vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
+	if (intersect.hit)
+	{
+		float brightness = max(dot(intersect.surfaceNormal, intersect.lightNormal), 0.0);
+		color.xyz = vec3(brightness);
+	}
+
 	imageStore(outputImage, ivec2(pixel), color);
 }

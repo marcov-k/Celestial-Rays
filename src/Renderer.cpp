@@ -28,8 +28,6 @@ void Renderer::Render(const SimulationGPUState& simulationState)
 {
 	if (!_context.BeginFrame()) return;
 
-	std::println("Camera position: {}, {}, {}", simulationState.cameraData.position.x, simulationState.cameraData.position.y, simulationState.cameraData.position.z);
-
 	_cameraBuffer->Write(&simulationState.cameraData, sizeof(CameraGPUData), 0);
 
 	VkCommandBuffer commandBuffer{ _context.GetCommandBuffer() };
