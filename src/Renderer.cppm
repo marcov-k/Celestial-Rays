@@ -2,6 +2,7 @@ module;
 
 #include <vulkan/vulkan.h>
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -27,6 +28,8 @@ private:
 	std::unique_ptr<VulkanShaderModule> _shaderModule;
 
 	std::unique_ptr<VulkanBuffer> _cameraBuffer;
+	std::unique_ptr<VulkanBuffer> _sphereBuffer;
+	std::uint64_t _sphereBufferCapacity{};
 
 	std::unique_ptr<VulkanDescriptorSetLayout> _descriptorLayout;
 	std::unique_ptr<VulkanDescriptorPool> _descriptorPool;
@@ -38,6 +41,7 @@ private:
 	void CreateShaderModule();
 
 	void AllocateBuffers();
+	void GrowSphereBuffer(std::uint64_t sphereCount);
 
 	void CreateDescriptorSetLayout();
 	void CreateDescriptorPool();

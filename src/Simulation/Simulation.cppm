@@ -1,14 +1,16 @@
 module;
 
-#include<glm/glm.hpp>
+#include <glm/glm.hpp>
 
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 export module Celestial.Simulation;
 
 import Celestial.GPUDatatypes;
 import Celestial.Simulation.Camera;
+import Celestial.Simulation.Datatypes;
 import Celestial.Simulation.Input;
 
 export class Simulation
@@ -28,4 +30,7 @@ private:
 	static constexpr float EPSILON{ 0.001f };
 
 	std::optional<Camera> _camera;
+
+	std::vector<Sphere> _spheres;
+	mutable std::vector<SphereGPUData> _gpuSpheres{};
 };

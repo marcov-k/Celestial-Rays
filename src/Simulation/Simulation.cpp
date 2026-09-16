@@ -16,6 +16,8 @@ Simulation::Simulation(float fieldOfView, std::uint32_t windowWidth, std::uint32
 {
 	float aspectRatio{ static_cast<float>(windowWidth) / static_cast<float>(windowHeight) };
 	_camera.emplace(fieldOfView, aspectRatio, glm::vec3{ 0.0f, 0.0f, 0.0f }, glm::vec2{ 0.0f, 0.0f });
+
+	_spheres.push_back({ 1.0f, glm::vec3{ 0.0f, 1.0f, -5.0f } });
 }
 
 Simulation::~Simulation() { }
@@ -43,5 +45,12 @@ void Simulation::StepSimulation(float deltaTime, const SimulationInput& userInpu
 
 SimulationGPUState Simulation::GetGPUState() const
 {
-	return { _camera->GetGPUData() };
+	std::size_t sphereCount{ _spheres.size() };
+	_gpuSpheres.resize(sphereCount);
+	for (std::size_t s{}; s < sphereCount; ++s)
+	{
+		_gpuSpheres[s] = _spheres[s].ToGPUData();
+	}
+
+	return { _camera->GetGPUData(), _gpuSpheres };
 }

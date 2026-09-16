@@ -64,6 +64,8 @@ VkDeviceSize VulkanBuffer::GetSize() const
 
 void VulkanBuffer::Write(const void* data, VkDeviceSize size, VkDeviceSize offset) const
 {
+	if (size == 0) return;
+
 	if (offset > _size || size > _size - offset) throw std::runtime_error("Attempted buffer write beyond Vulkan buffer size");
 
 	void* mapPtr{};

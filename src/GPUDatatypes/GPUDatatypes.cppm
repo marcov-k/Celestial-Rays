@@ -2,6 +2,8 @@ module;
 
 #include <glm/glm.hpp>
 
+#include <vector>
+
 export module Celestial.GPUDatatypes;
 
 export struct alignas(16) GPUVec3
@@ -20,7 +22,22 @@ private:
 static_assert(sizeof(GPUVec3) == 16);
 static_assert(alignof(GPUVec3) == 16);
 
-export struct CameraGPUData
+export struct alignas(16) GPUVec4
+{
+	GPUVec4() { }
+	GPUVec4(float x, float y, float z, float w) : x(x), y(y), z(y), w(w) { }
+	GPUVec4(const glm::vec4& source) : x(source.x), y(source.y), z(source.z), w(source.w) { }
+
+	float x{};
+	float y{};
+	float z{};
+	float w{};
+};
+
+static_assert(sizeof(GPUVec4) == 16);
+static_assert(alignof(GPUVec4) == 16);
+
+export struct alignas(16) CameraGPUData
 {
 	GPUVec3 position{};
 	GPUVec3 forward{};
@@ -30,7 +47,20 @@ export struct CameraGPUData
 	float planeHeight{};
 };
 
+static_assert(sizeof(CameraGPUData) == 80);
+static_assert(alignof(CameraGPUData) == 16);
+
+export struct alignas(16) SphereGPUData
+{
+	GPUVec4 spatialData{}; // (x, y, z, radius)
+	int materialIndex{};
+};
+
+static_assert(sizeof(SphereGPUData) == 32);
+static_assert(alignof(SphereGPUData) == 16);
+
 export struct SimulationGPUState
 {
 	CameraGPUData cameraData;
+	std::vector<SphereGPUData>& sphereData;
 };
