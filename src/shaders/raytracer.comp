@@ -35,6 +35,19 @@ layout(std430, binding = 2) readonly buffer SphereDataBuffer
 	Sphere spheres[];
 };
 
+struct Material
+{
+	vec4 albedo;
+	float roughness;
+	float specular;
+	vec4 emission;
+};
+
+layout(std430, binding = 3) readonly buffer MaterialDataBuffer
+{
+	Material materials[];
+};
+
 struct Ray
 {
 	vec3 origin;
@@ -52,6 +65,7 @@ struct IntersectInfo
 {
 	bool hit;
 	IntersectPoint point;
+	Material material;
 	vec3 surfaceNormal;
 	vec3 lightNormal;
 };
@@ -91,7 +105,7 @@ vec3 Normal(vec3 point, vec3 center)
 
 IntersectInfo FindClosestIntersect(Ray ray)
 {
-	IntersectInfo closestIntersect = IntersectInfo(false, IntersectPoint(false, 0.0, vec3(0.0)), vec3(0.0), vec3(0.0));
+	IntersectInfo closestIntersect = IntersectInfo(false, IntersectPoint(false, 0.0, vec3(0.0)), materials[0], vec3(0.0), vec3(0.0));
 	float closestDist = 3.402823466e+38;
 	for (uint s = 0; s < sphereCount; s++)
 	{
@@ -100,7 +114,7 @@ IntersectInfo FindClosestIntersect(Ray ray)
 		if (intersect.hit && intersect.dist < closestDist)
 		{
 			closestDist = intersect.dist;
-			closestIntersect = IntersectInfo(true, intersect, Normal(intersect.position, sphere.spatialData.xyz), Normal(lightSourcePosition, intersect.position));
+			closestIntersect = IntersectInfo(true, intersect, materials[sphere.materialIndex], Normal(intersect.position, sphere.spatialData.xyz), Normal(lightSourcePosition, intersect.position));
 		}
 	}
 	
@@ -130,7 +144,7 @@ void main()
 	if (intersect.hit)
 	{
 		float brightness = max(dot(intersect.surfaceNormal, intersect.lightNormal), 0.0);
-		color.xyz = vec3(brightness);
+		color.xyz = intersect.material.albedo.xyz * brightness;
 	}
 
 	imageStore(outputImage, ivec2(pixel), color);

@@ -47,12 +47,21 @@ private:
 	std::uint32_t _height{};
 	bool _shouldClose{};
 	bool _resized{};
-	bool _haveMousePosition{ false };
+	bool _cameraMode{ false };
+	bool _setMousePos{ false };
+	int _mouseDefaultX{};
+	int _mouseDefaultY{};
 	int _mouseX{};
 	int _mouseY{};
 	int _mouseDeltaX{};
 	int _mouseDeltaY{};
 	std::array<bool, 256> _keys{};
 
+	void LoseFocus();
+	void GainFocus();
+
+	void UpdateCameraMode();
+	void EnableCameraMode();
+	void DisableCameraMode();
 	void HandleMouseMove(LPARAM lParam);
 };

@@ -25,7 +25,7 @@ static_assert(alignof(GPUVec3) == 16);
 export struct alignas(16) GPUVec4
 {
 	GPUVec4() { }
-	GPUVec4(float x, float y, float z, float w) : x(x), y(y), z(y), w(w) { }
+	GPUVec4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) { }
 	GPUVec4(const glm::vec4& source) : x(source.x), y(source.y), z(source.z), w(source.w) { }
 
 	float x{};
@@ -53,7 +53,7 @@ static_assert(alignof(CameraGPUData) == 16);
 export struct alignas(16) SphereGPUData
 {
 	GPUVec4 spatialData{}; // (x, y, z, radius)
-	int materialIndex{};
+	std::uint32_t materialIndex{};
 };
 
 static_assert(sizeof(SphereGPUData) == 32);
@@ -64,3 +64,14 @@ export struct SimulationGPUState
 	CameraGPUData cameraData;
 	std::vector<SphereGPUData>& sphereData;
 };
+
+export struct alignas(16) MaterialGPUData
+{
+	GPUVec3 albedo{};
+	float roughness{};
+	float specular{};
+	GPUVec3 emission{};
+};
+
+static_assert(sizeof(MaterialGPUData) == 48);
+static_assert(alignof(MaterialGPUData) == 16);

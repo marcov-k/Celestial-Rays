@@ -6,5 +6,5 @@ module Celestial.Simulation.Datatypes;
 
 SphereGPUData Sphere::ToGPUData() const
 {
-	return { GPUVec4{ position.x, position.y, position.z, radius }, 0 };
+	return { GPUVec4{ position.x, position.y, position.z, radius }, materialIndex };
 }

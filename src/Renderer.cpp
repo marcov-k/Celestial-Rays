@@ -4,10 +4,12 @@ module;
 
 #include <cstdint>
 #include <print>
+#include <vector>
 
 module Celestial.Rendering;
 
-Renderer::Renderer(VulkanContext& context) : _context(context)
+Renderer::Renderer(VulkanContext& context, const std::vector<MaterialGPUData>& materials)
+	: _context(context), _materialCount(materials.size())
 {
 	CreateShaderModule();
 
@@ -20,6 +22,8 @@ Renderer::Renderer(VulkanContext& context) : _context(context)
 
 	CreatePipelineLayout();
 	CreatePipeline();
+
+	PushMaterials(materials);
 }
 
 Renderer::~Renderer() { }
@@ -56,74 +60,6 @@ void Renderer::CreateShaderModule()
 	_shaderModule = _context.CreateShaderModule("raytracer");
 }
 
-void Renderer::CreateDescriptorSetLayout()
-{
-	VkDescriptorSetLayoutBinding renderImageBinding{
-		.binding = 0,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-	};
-
-	VkDescriptorSetLayoutBinding cameraBufferBinding{
-		.binding = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-	};
-
-	VkDescriptorSetLayoutBinding sphereBufferBinding{
-		.binding = 2,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-	};
-
-	_descriptorLayout = _context.CreateDescriptorSetLayout({ renderImageBinding, cameraBufferBinding,
-		sphereBufferBinding });
-}
-
-void Renderer::CreateDescriptorPool()
-{
-	VkDescriptorPoolSize renderImagePool{
-		.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-		.descriptorCount = 1
-	};
-
-	VkDescriptorPoolSize cameraBufferPool{
-		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1
-	};
-
-	VkDescriptorPoolSize sphereBufferPool{
-		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1
-	};
-
-	_descriptorPool = _context.CreateDescriptorPool({ renderImagePool, cameraBufferPool, sphereBufferPool }, 1);
-}
-
-void Renderer::AllocateDescriptorSet()
-{
-	_descriptorSet = _context.AllocateDescriptorSet(*_descriptorPool, *_descriptorLayout);
-}
-
-void Renderer::CreatePipelineLayout()
-{
-	VkPushConstantRange constantRange{
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.offset = 0,
-		.size = sizeof(std::uint32_t)
-	};
-
-	_pipelineLayout = _context.CreatePipelineLayout({ _descriptorLayout->GetDescriptorSetLayout() }, { constantRange });
-}
-
-void Renderer::CreatePipeline()
-{
-	_pipeline = _context.CreateComputePipeline(*_shaderModule, *_pipelineLayout);
-}
-
 void Renderer::AllocateBuffers()
 {
 	_cameraBuffer = _context.CreateBuffer(sizeof(CameraGPUData), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
@@ -132,6 +68,10 @@ void Renderer::AllocateBuffers()
 	_sphereBuffer = _context.CreateBuffer(sizeof(SphereGPUData), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 	_sphereBufferCapacity = 1;
+
+	_materialBuffer = _context.CreateBuffer(_materialCount * sizeof(MaterialGPUData),
+		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+		VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 }
 
 void Renderer::GrowSphereBuffer(std::uint64_t sphereCount)
@@ -160,6 +100,92 @@ void Renderer::GrowSphereBuffer(std::uint64_t sphereCount)
 	};
 
 	_context.UpdateDescriptorSet(writeSphereBuffer);
+}
+
+void Renderer::CreateDescriptorSetLayout()
+{
+	VkDescriptorSetLayoutBinding renderImageBinding{
+		.binding = 0,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+	};
+
+	VkDescriptorSetLayoutBinding cameraBufferBinding{
+		.binding = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+	};
+
+	VkDescriptorSetLayoutBinding sphereBufferBinding{
+		.binding = 2,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+	};
+
+	VkDescriptorSetLayoutBinding materialBufferBinding{
+		.binding = 3,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+	};
+
+	_descriptorLayout = _context.CreateDescriptorSetLayout({ renderImageBinding, cameraBufferBinding,
+		sphereBufferBinding, materialBufferBinding });
+}
+
+void Renderer::CreateDescriptorPool()
+{
+	VkDescriptorPoolSize renderImagePool{
+		.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+		.descriptorCount = 1
+	};
+
+	VkDescriptorPoolSize cameraBufferPool{
+		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1
+	};
+
+	VkDescriptorPoolSize sphereBufferPool{
+		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1
+	};
+
+	VkDescriptorPoolSize materialBufferPool{
+		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1
+	};
+
+	_descriptorPool = _context.CreateDescriptorPool({ renderImagePool, cameraBufferPool, sphereBufferPool,
+		materialBufferPool }, 1);
+}
+
+void Renderer::AllocateDescriptorSet()
+{
+	_descriptorSet = _context.AllocateDescriptorSet(*_descriptorPool, *_descriptorLayout);
+}
+
+void Renderer::CreatePipelineLayout()
+{
+	VkPushConstantRange constantRange{
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.offset = 0,
+		.size = sizeof(std::uint32_t)
+	};
+
+	_pipelineLayout = _context.CreatePipelineLayout({ _descriptorLayout->GetDescriptorSetLayout() }, { constantRange });
+}
+
+void Renderer::CreatePipeline()
+{
+	_pipeline = _context.CreateComputePipeline(*_shaderModule, *_pipelineLayout);
+}
+
+void Renderer::PushMaterials(const std::vector<MaterialGPUData>& materials) const
+{
+	_materialBuffer->Write(materials.data(), _materialCount * sizeof(MaterialGPUData), 0);
 }
 
 void Renderer::UpdateDescriptorSet() const
@@ -208,5 +234,21 @@ void Renderer::UpdateDescriptorSet() const
 		.pBufferInfo = &sphereBufferInfo
 	};
 
-	_context.UpdateDescriptorSets({ writeRenderImage, writeCameraBuffer, writeSphereBuffer });
+	VkDescriptorBufferInfo materialBufferInfo{
+		.buffer = _materialBuffer->GetBuffer(),
+		.offset = 0,
+		.range = _materialCount * sizeof(MaterialGPUData)
+	};
+
+	VkWriteDescriptorSet writeMaterialBuffer{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = _descriptorSet,
+		.dstBinding = 3,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &materialBufferInfo
+	};
+
+	_context.UpdateDescriptorSets({ writeRenderImage, writeCameraBuffer, writeSphereBuffer,
+		writeMaterialBuffer });
 }

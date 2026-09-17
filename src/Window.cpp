@@ -43,6 +43,8 @@ Window::Window(HINSTANCE instance, std::uint32_t width, std::uint32_t height, co
 
 	ShowWindow(_hwnd, SW_SHOW);
 	UpdateWindow(_hwnd);
+
+	UpdateCameraMode();
 }
 
 Window::~Window()
@@ -93,12 +95,30 @@ LRESULT CALLBACK Window::WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
 			window->_hwnd = nullptr;
 			break;
 
+		case WM_KILLFOCUS:
+			window->LoseFocus();
+			return 0;
+
+		case WM_SETFOCUS:
+			window->GainFocus();
+			return 0;
+
 		case WM_KEYDOWN:
 			window->_keys[wParam] = true;
 			return 0;
 
+		case WM_SYSKEYDOWN:
+			window->_keys[wParam] = true;
+			window->UpdateCameraMode();
+			return 0;
+
 		case WM_KEYUP:
 			window->_keys[wParam] = false;
+			return 0;
+
+		case WM_SYSKEYUP:
+			window->_keys[wParam] = false;
+			window->UpdateCameraMode();
 			return 0;
 
 		case WM_MOUSEMOVE:
@@ -184,18 +204,86 @@ HINSTANCE Window::Instance() const noexcept
 	return _instance;
 }
 
+void Window::LoseFocus()
+{
+	std::fill(_keys.begin(), _keys.end(), false);
+	DisableCameraMode();
+}
+
+void Window::GainFocus()
+{
+	EnableCameraMode();
+}
+
+void Window::UpdateCameraMode()
+{
+	if (_keys[VK_MENU] == _cameraMode)
+	{
+		if (!_keys[VK_MENU]) EnableCameraMode();
+		else DisableCameraMode();
+	}
+}
+
+void Window::EnableCameraMode()
+{
+	if (_cameraMode) return;
+
+	_cameraMode = true;
+
+	ShowCursor(FALSE);
+	SetCapture(_hwnd);
+
+	_mouseX = _width / 2;
+	_mouseY = _height / 2;
+
+	POINT center{ _mouseX, _mouseY };
+	ClientToScreen(_hwnd, &center);
+
+	_setMousePos = true;
+	SetCursorPos(center.x, center.y);
+}
+
+void Window::DisableCameraMode()
+{
+	if (!_cameraMode) return;
+
+	_cameraMode = false;
+
+	ShowCursor(TRUE);
+	ReleaseCapture();
+
+	_mouseDeltaX = 0;
+	_mouseDeltaY = 0;
+}
+
 void Window::HandleMouseMove(LPARAM lParam)
 {
+	if (_setMousePos)
+	{
+		_setMousePos = false;
+		return;
+	}
+
 	int newX{ GET_X_LPARAM(lParam) };
 	int newY{ GET_Y_LPARAM(lParam) };
 
-	if (_haveMousePosition)
+	if (_cameraMode)
 	{
 		_mouseDeltaX += newX - _mouseX;
 		_mouseDeltaY += newY - _mouseY;
-	}
 
-	_mouseX = newX;
-	_mouseY = newY;
-	_haveMousePosition = true;
+		_mouseX = _width / 2;
+		_mouseY = _height / 2;
+
+		POINT center{ _mouseX, _mouseY };
+		ClientToScreen(_hwnd, &center);
+
+		_setMousePos = true;
+		SetCursorPos(center.x, center.y);
+	}
+	else
+	{
+		_mouseX = newX;
+		_mouseY = newY;
+	}
 }

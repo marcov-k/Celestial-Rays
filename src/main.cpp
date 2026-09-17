@@ -23,10 +23,10 @@ int main()
 	try
 	{
 		HINSTANCE instance = GetModuleHandleW(nullptr);
-		Window window(instance, WindowWidth, WindowHeight, L"Celestial-Rays");
+		Window window{ instance, WindowWidth, WindowHeight, L"Celestial-Rays" };
 		VulkanContext vulkan{ window };
-		Renderer renderer{ vulkan };
 		Simulation simulation{ FieldOfView, WindowWidth, WindowHeight };
+		Renderer renderer{ vulkan, simulation.GetMaterialGPUData() };
 
 		auto previousTime{ std::chrono::steady_clock::now() };
 

@@ -17,7 +17,7 @@ import Celestial.Vulkan.Wrappers;
 export class Renderer
 {
 public:
-	explicit Renderer(VulkanContext& vulkanContext);
+	explicit Renderer(VulkanContext& vulkanContext, const std::vector<MaterialGPUData>& materials);
 	~Renderer();
 
 	void Render(const SimulationGPUState& simulationState);
@@ -30,6 +30,8 @@ private:
 	std::unique_ptr<VulkanBuffer> _cameraBuffer;
 	std::unique_ptr<VulkanBuffer> _sphereBuffer;
 	std::uint64_t _sphereBufferCapacity{};
+	std::unique_ptr<VulkanBuffer> _materialBuffer;
+	std::uint64_t _materialCount{};
 
 	std::unique_ptr<VulkanDescriptorSetLayout> _descriptorLayout;
 	std::unique_ptr<VulkanDescriptorPool> _descriptorPool;
@@ -49,6 +51,8 @@ private:
 
 	void CreatePipelineLayout();
 	void CreatePipeline();
+
+	void PushMaterials(const std::vector<MaterialGPUData>& materials) const;
 
 	void UpdateDescriptorSet() const;
 };

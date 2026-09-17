@@ -22,6 +22,7 @@ public:
 	void StepSimulation(float deltaTime, const SimulationInput& userInput);
 
 	SimulationGPUState GetGPUState() const;
+	std::vector<MaterialGPUData> GetMaterialGPUData() const;
 
 private:
 	static const glm::vec3 WORLD_UP;
@@ -31,6 +32,8 @@ private:
 
 	std::optional<Camera> _camera;
 
-	std::vector<Sphere> _spheres;
+	std::vector<Sphere> _spheres{};
+	std::vector<Material> _materials{};
+
 	mutable std::vector<SphereGPUData> _gpuSpheres{};
 };
