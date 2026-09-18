@@ -28,7 +28,7 @@ Renderer::Renderer(VulkanContext& context, const std::vector<MaterialGPUData>& m
 
 Renderer::~Renderer() { }
 
-void Renderer::Render(const SimulationGPUState& simulationState)
+void Renderer::Render(const SimulationGPUState& simulationState, std::uint32_t frameIndex)
 {
 	if (!_context.BeginFrame()) return;
 
@@ -46,7 +46,9 @@ void Renderer::Render(const SimulationGPUState& simulationState)
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _pipelineLayout->GetPipelineLayout(),
 		0, 1, &_descriptorSet, 0, nullptr);
 
-	vkCmdPushConstants(commandBuffer, _pipelineLayout->GetPipelineLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(std::uint32_t), &sphereCount);
+	PushConstants pushConstants{ sphereCount, frameIndex };
+
+	vkCmdPushConstants(commandBuffer, _pipelineLayout->GetPipelineLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pushConstants);
 
 	std::uint32_t workGroupsX{ (renderImageExtent.width + 7) / 8 };
 	std::uint32_t workGroupsY{ (renderImageExtent.height + 7) / 8 };
@@ -172,7 +174,7 @@ void Renderer::CreatePipelineLayout()
 	VkPushConstantRange constantRange{
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.offset = 0,
-		.size = sizeof(std::uint32_t)
+		.size = sizeof(PushConstants)
 	};
 
 	_pipelineLayout = _context.CreatePipelineLayout({ _descriptorLayout->GetDescriptorSetLayout() }, { constantRange });

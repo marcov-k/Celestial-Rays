@@ -29,6 +29,7 @@ int main()
 		Renderer renderer{ vulkan, simulation.GetMaterialGPUData() };
 
 		auto previousTime{ std::chrono::steady_clock::now() };
+		std::uint32_t frameIndex{};
 
 		while (!window.ShouldClose())
 		{
@@ -38,6 +39,7 @@ int main()
 			auto currentTime{ std::chrono::steady_clock::now() };
 
 			float deltaTime{ std::chrono::duration<float>(currentTime - previousTime).count() };
+			std::println("FPS: {}", 1.0f / deltaTime);
 
 			previousTime = currentTime;
 
@@ -45,7 +47,9 @@ int main()
 
 			simulation.StepSimulation(deltaTime, simulationInput);
 
-			renderer.Render(simulation.GetGPUState());
+			renderer.Render(simulation.GetGPUState(), frameIndex);
+
+			frameIndex++;
 		}
 
 		return 0;

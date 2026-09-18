@@ -22,6 +22,7 @@ export struct Material
 	glm::vec3 albedo{};
 	float roughness{};
 	float specular{};
+	float indexOfRefraction{};
 	glm::vec3 emission{};
 
 	MaterialGPUData ToGPUData() const;

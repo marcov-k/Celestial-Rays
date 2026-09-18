@@ -59,6 +59,12 @@ export struct alignas(16) SphereGPUData
 static_assert(sizeof(SphereGPUData) == 32);
 static_assert(alignof(SphereGPUData) == 16);
 
+export struct PushConstants
+{
+	std::uint32_t sphereCount{};
+	std::uint32_t frameIndex{};
+};
+
 export struct SimulationGPUState
 {
 	CameraGPUData cameraData;
@@ -70,6 +76,7 @@ export struct alignas(16) MaterialGPUData
 	GPUVec3 albedo{};
 	float roughness{};
 	float specular{};
+	float indexOfRefraction{};
 	GPUVec3 emission{};
 };
 

@@ -20,7 +20,7 @@ public:
 	explicit Renderer(VulkanContext& vulkanContext, const std::vector<MaterialGPUData>& materials);
 	~Renderer();
 
-	void Render(const SimulationGPUState& simulationState);
+	void Render(const SimulationGPUState& simulationState, std::uint32_t frameIndex);
 
 private:
 	VulkanContext& _context;

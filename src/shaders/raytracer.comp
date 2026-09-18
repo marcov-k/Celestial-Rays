@@ -7,6 +7,7 @@ layout(binding = 0, rgba8) uniform writeonly image2D outputImage;
 layout(push_constant) uniform PushConstants
 {
 	uint sphereCount;
+	uint frameIndex;
 };
 
 struct CameraData
@@ -40,6 +41,7 @@ struct Material
 	vec4 albedo;
 	float roughness;
 	float specular;
+	float indexOfRefraction;
 	vec4 emission;
 };
 
@@ -52,6 +54,8 @@ struct Ray
 {
 	vec3 origin;
 	vec3 direction;
+	vec3 accumulatedColor;
+	vec3 throughput;
 };
 
 struct IntersectPoint
@@ -64,13 +68,54 @@ struct IntersectPoint
 struct IntersectInfo
 {
 	bool hit;
-	IntersectPoint point;
-	Material material;
-	vec3 surfaceNormal;
-	vec3 lightNormal;
+	float dist;
+	vec3 position;
+	Sphere sphere;
 };
 
-vec3 lightSourcePosition = vec3(10.0, 5.0, 20.0);
+struct OrthonormalBasis
+{
+	vec3 t;
+	vec3 b;
+};
+
+struct SpecularInfo
+{
+	vec3 direction;
+	vec3 halfVector;
+};
+
+const uint RAYS_PER_PIXEL = 30;
+const uint BOUNCE_LIMIT = 4;
+const float EPSILON = 1e-8;
+const float PI = 3.14159265359;
+const float RAY_OFFSET_SCALE = 2e-3;
+
+uint rngState;
+
+uint PCGHash(uint v)
+{
+	uint state = v * 747796405u + 2891336453u;
+	uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+	return (word >> 22u) ^ word;
+}
+
+void InitRandom(uvec2 pixel, ivec2 dims, uint frameIndex)
+{
+	uint pixelIndex = pixel.y * uint(dims.x) + pixel.x;
+	rngState = PCGHash(pixelIndex ^ PCGHash(frameIndex));
+}
+
+float Random()
+{
+	rngState = PCGHash(rngState);
+	return float(rngState) * (1.0 / 4294967296.0);
+}
+
+vec3 Normal(vec3 point, vec3 center)
+{
+	return normalize(point - center);
+}
 
 IntersectPoint CheckIntersect(Ray ray, Sphere sphere)
 {
@@ -98,27 +143,154 @@ IntersectPoint CheckIntersect(Ray ray, Sphere sphere)
 	return IntersectPoint(true, hitDist, intersectPoint);
 }
 
-vec3 Normal(vec3 point, vec3 center)
-{
-	return normalize(point - center);
-}
-
 IntersectInfo FindClosestIntersect(Ray ray)
 {
-	IntersectInfo closestIntersect = IntersectInfo(false, IntersectPoint(false, 0.0, vec3(0.0)), materials[0], vec3(0.0), vec3(0.0));
-	float closestDist = 3.402823466e+38;
+	IntersectInfo closestIntersect = IntersectInfo(false, 3.402823466e+38, vec3(0.0), spheres[0]);
 	for (uint s = 0; s < sphereCount; s++)
 	{
 		Sphere sphere = spheres[s];
 		IntersectPoint intersect = CheckIntersect(ray, sphere);
-		if (intersect.hit && intersect.dist < closestDist)
+		if (intersect.hit && intersect.dist < closestIntersect.dist)
 		{
-			closestDist = intersect.dist;
-			closestIntersect = IntersectInfo(true, intersect, materials[sphere.materialIndex], Normal(intersect.position, sphere.spatialData.xyz), Normal(lightSourcePosition, intersect.position));
+			closestIntersect = IntersectInfo(true, intersect.dist, intersect.position, sphere);
 		}
 	}
 	
 	return closestIntersect;
+}
+
+OrthonormalBasis CalculateOrthonormalBasis(vec3 normal)
+{
+	vec3 a;
+	if (abs(normal.z) < 0.99)
+	{
+		a = vec3(0.0, 0.0, 1.0);
+	}
+	else
+	{
+		a = vec3(1.0, 0.0, 0.0);
+	}
+
+	vec3 t = normalize(cross(a, normal));
+	vec3 b = cross(normal, t);
+
+	return OrthonormalBasis(t, b);
+}
+
+SpecularInfo SpecularDir(vec3 rayDir, vec3 normal, float roughness)
+{
+	float a = roughness * roughness;
+
+	float rand1 = Random();
+	float rand2 = Random();
+
+	float azimuth = 2.0 * PI * rand1;
+
+	float tanSquareTheta = a * a * rand2 / (1.0 - rand2);
+	float cosTheta = 1.0 / sqrt(1.0 + tanSquareTheta);
+	float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+
+	OrthonormalBasis basis = CalculateOrthonormalBasis(normal);
+
+	vec3 h = sinTheta * cos(azimuth) * basis.t + sinTheta * sin(azimuth) * basis.b + cosTheta * normal;
+
+	vec3 specularDir = rayDir - 2.0 * dot(rayDir, h) * h;
+	
+	return SpecularInfo(specularDir, h);
+}
+
+vec3 DiffuseDir(vec3 normal)
+{
+	float rand1 = Random();
+	float rand2 = Random();
+
+	float r = sqrt(rand1);
+	float angle = 2.0 * PI * rand2;
+
+	float x = r * cos(angle);
+	float y = r * sin(angle);
+	float z = sqrt(1.0 - x * x - y * y);
+
+	OrthonormalBasis basis = CalculateOrthonormalBasis(normal);
+
+	vec3 diffuseDir = x * basis.t + y * basis.b + z * normal;
+
+	return diffuseDir;
+}
+
+Ray TraceRay(Ray ray)
+{
+	for (uint b = 0; b < BOUNCE_LIMIT; b++)
+	{
+		IntersectInfo intersect = FindClosestIntersect(ray);
+
+		if (!intersect.hit) return ray;
+
+		Sphere sphere = intersect.sphere;
+		vec3 spherePosition = sphere.spatialData.xyz;
+		Material material = materials[sphere.materialIndex];
+		vec3 albedo = material.albedo.xyz;
+		vec3 emission = material.emission.xyz;
+
+		vec3 surfaceNormal = Normal(intersect.position, spherePosition);
+
+		ray.accumulatedColor += ray.throughput * material.emission.xyz;
+
+		if (Random() < material.specular)
+		{
+			vec3 incomingDir = -ray.direction;
+
+			SpecularInfo specular = SpecularDir(ray.direction, surfaceNormal, material.roughness);
+			ray.direction = specular.direction;
+
+			float nDotIncoming = max(dot(surfaceNormal, incomingDir), 0.0);
+			float nDotOutgoing = max(dot(surfaceNormal, specular.direction), 0.0);
+
+			if (nDotIncoming <= 0.0 || nDotOutgoing <= 0.0)
+			{
+				// invalid path, 0 contribution
+			}
+			else
+			{
+				float nDotH = max(dot(surfaceNormal, specular.halfVector), 0.0);
+				float outgoingDotH = abs(dot(specular.direction, specular.halfVector));
+				float incomingDotH = max(dot(incomingDir, specular.halfVector), 0.0);
+
+				float f0 = (1.0 - material.indexOfRefraction) / (1.0 + material.indexOfRefraction);
+				f0 *= f0;
+
+				float f = f0 + (1.0 - f0) * pow((1.0 - incomingDotH), 5);
+
+				float k = material.roughness + 1.0;
+				k = k * k / 8.0;
+
+				float gIncoming = nDotIncoming / (nDotIncoming * (1.0 - k) + k);
+				float gOutgoing = nDotOutgoing / (nDotOutgoing * (1.0 - k) + k);
+
+				float g = gIncoming * gOutgoing;
+
+				float numerator = f * g * outgoingDotH;
+				float denominator = material.specular * nDotIncoming * nDotH;
+
+				ray.throughput *= numerator / denominator;
+			}
+		}
+		else
+		{
+			ray.direction = DiffuseDir(surfaceNormal);
+			ray.accumulatedColor += ray.throughput * emission;
+			ray.throughput *= albedo / (1.0 - material.specular);
+		}
+
+		ray.origin = intersect.position + EPSILON * surfaceNormal;
+	}
+
+	return ray;
+}
+
+vec3 ToneMap(vec3 color)
+{
+	return color / (1.0 + color);
 }
 
 void main()
@@ -129,23 +301,36 @@ void main()
 
 	if (pixel.x >= imageDims.x || pixel.y >= imageDims.y) return;
 
+	InitRandom(pixel, imageDims, frameIndex);
+
 	vec2 pixelNorm = (vec2(pixel) + 0.5) / vec2(imageDims);
 	pixelNorm = (pixelNorm - 0.5) * 2.0;
 	pixelNorm.y *= -1.0;
 
+	vec3 cameraPosition = cameraInfo.position.xyz;
+
 	vec2 pixelDisplacement = vec2(pixelNorm.x * (cameraInfo.planeWidth / 2.0), pixelNorm.y * (cameraInfo.planeHeight / 2.0));
-	vec3 rayDir = cameraInfo.forward.xyz + pixelDisplacement.x * cameraInfo.right.xyz + pixelDisplacement.y * cameraInfo.up.xyz;
-	rayDir = normalize(rayDir);
-	Ray ray = Ray(cameraInfo.position.xyz, rayDir);
 
-	IntersectInfo intersect = FindClosestIntersect(ray);
-
-	vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
-	if (intersect.hit)
+	Ray rays[RAYS_PER_PIXEL];
+	for (uint r = 0; r < RAYS_PER_PIXEL; r++)
 	{
-		float brightness = max(dot(intersect.surfaceNormal, intersect.lightNormal), 0.0);
-		color.xyz = intersect.material.albedo.xyz * brightness;
+		vec2 rayOffset = RAY_OFFSET_SCALE * vec2(Random(), Random());
+		vec2 rayPixelDisplacement = pixelDisplacement + rayOffset;
+
+		vec3 rayDir = cameraInfo.forward.xyz + rayPixelDisplacement.x * cameraInfo.right.xyz + rayPixelDisplacement.y * cameraInfo.up.xyz;
+		rayDir = normalize(rayDir);
+		Ray ray = Ray(cameraPosition, rayDir, vec3(0.0), vec3(1.0));
+		rays[r] = TraceRay(ray);
 	}
 
-	imageStore(outputImage, ivec2(pixel), color);
+	vec3 averageColor = vec3(0.0);
+	for (uint r = 0; r < RAYS_PER_PIXEL; r++)
+	{
+		averageColor += rays[r].accumulatedColor;
+	}
+	averageColor /= RAYS_PER_PIXEL;
+
+	averageColor = ToneMap(averageColor);
+
+	imageStore(outputImage, ivec2(pixel), vec4(averageColor, 1.0));
 }

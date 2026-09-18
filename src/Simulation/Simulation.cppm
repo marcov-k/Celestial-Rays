@@ -27,7 +27,7 @@ public:
 private:
 	static const glm::vec3 WORLD_UP;
 	static constexpr float MOUSE_SENSITIVITY{ 0.005f };
-	static constexpr float CAMERA_MOVE_SPEED{ 5.0f };
+	static constexpr float CAMERA_MOVE_SPEED{ 15.0f };
 	static constexpr float EPSILON{ 0.001f };
 
 	std::optional<Camera> _camera;

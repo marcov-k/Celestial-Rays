@@ -6,5 +6,5 @@ module Celestial.Simulation.Datatypes;
 
 MaterialGPUData Material::ToGPUData() const
 {
-	return { albedo, roughness, specular, emission };
+	return { albedo, roughness, specular, indexOfRefraction, emission };
 }
