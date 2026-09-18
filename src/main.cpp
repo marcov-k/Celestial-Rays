@@ -43,7 +43,7 @@ int main()
 
 			previousTime = currentTime;
 
-			if (window.Width() == 0 || window.Height() == 0) continue;
+			if (!window.Focused() || window.Width() == 0 || window.Height() == 0) continue;
 
 			simulation.StepSimulation(deltaTime, simulationInput);
 

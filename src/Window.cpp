@@ -184,6 +184,11 @@ void Window::ClearResizedFlag() noexcept
 	_resized = false;
 }
 
+bool Window::Focused() const noexcept
+{
+	return _focused;
+}
+
 std::uint32_t Window::Width() const noexcept
 {
 	return _width;
@@ -206,12 +211,14 @@ HINSTANCE Window::Instance() const noexcept
 
 void Window::LoseFocus()
 {
+	_focused = false;
 	std::fill(_keys.begin(), _keys.end(), false);
 	DisableCameraMode();
 }
 
 void Window::GainFocus()
 {
+	_focused = true;
 	EnableCameraMode();
 }
 
