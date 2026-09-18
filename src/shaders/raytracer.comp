@@ -89,7 +89,7 @@ const uint RAYS_PER_PIXEL = 30;
 const uint BOUNCE_LIMIT = 4;
 const float EPSILON = 1e-8;
 const float PI = 3.14159265359;
-const float RAY_OFFSET_SCALE = 2e-3;
+const float RAY_OFFSET_SCALE = 5e-3;
 
 uint rngState;
 
