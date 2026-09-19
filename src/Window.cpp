@@ -195,6 +195,16 @@ bool Window::Paused() const noexcept
 	return _paused;
 }
 
+bool Window::FastMovement() const noexcept
+{
+	return _keys[VK_SHIFT];
+}
+
+bool Window::SlowMovement() const noexcept
+{
+	return _keys[VK_CONTROL];
+}
+
 std::uint32_t Window::Width() const noexcept
 {
 	return _width;

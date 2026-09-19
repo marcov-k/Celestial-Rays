@@ -29,6 +29,8 @@ public:
 	void ClearResizedFlag() noexcept;
 	bool Focused() const noexcept;
 	bool Paused() const noexcept;
+	bool FastMovement() const noexcept;
+	bool SlowMovement() const noexcept;
 
 	std::uint32_t Width() const noexcept;
 	std::uint32_t Height() const noexcept;

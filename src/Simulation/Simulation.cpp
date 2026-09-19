@@ -20,54 +20,12 @@ Simulation::Simulation(float fieldOfView, std::uint32_t windowWidth, std::uint32
 	float aspectRatio{ static_cast<float>(windowWidth) / static_cast<float>(windowHeight) };
 	_camera.emplace(fieldOfView, aspectRatio, glm::vec3{ 0.0f, 0.0f, 0.0f }, glm::vec2{ 0.0f, 0.0f });
 
-	Material starMaterial{
-	.albedo = glm::vec3{ 1.0f, 0.75f, 0.35f },
-	.roughness = 0.2f,
-	.specular = 0.1f,
-	.indexOfRefraction = 1.0f,
-	.emission = glm::vec3{ 8.0f, 4.0f, 1.0f }
-	};
-
-	Material waterPlanetMaterial{
-		.albedo = glm::vec3{ 0.03f, 0.17f, 0.82f },
-		.roughness = 0.4f,
-		.specular = 0.3f,
-		.indexOfRefraction = 1.23f,
-		.emission = glm::vec3{ 0.0f }
-	};
-
-	Material rockyPlanetMaterial{
-		.albedo = glm::vec3{ 0.55f, 0.32f, 0.18f },
-		.roughness = 0.8f,
-		.specular = 0.2f,
-		.indexOfRefraction = 1.5f,
-		.emission = glm::vec3{ 0.0f }
-	};
-
-	_materials.push_back(starMaterial);
-	_materials.push_back(waterPlanetMaterial);
-	_materials.push_back(rockyPlanetMaterial);
-
-	Sphere star{ 10.0f, 3500.0f, 0.5f, 0.7f, glm::vec3{ 0.0f, 0.0f, 50.0f }, glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f }, glm::vec3{ 0.0f, 0.0f, 0.0f }, glm::vec3{ 0.0f }, 0 };
-
-	Sphere waterPlanet{ 1.0f, 1.0f, 0.5f, 0.3f, glm::vec3{ 0.0f, 1.0f, -6.0f }, glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f }, glm::vec3{ 5.0f, 5.0f, 0.0f }, glm::vec3{ 0.0f }, 1 };
-
-	Sphere waterPlanet2{ 7.0f, 3.0f, 0.5f, 0.3f, glm::vec3{ -15.0f, 0.0f, -3.0f }, glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f }, glm::vec3{ 5.0f, 5.0f, 0.0f }, glm::vec3{ 0.0f }, 1 };
-
-	Sphere rockyPlanet{ 1.5f, 2.0f, 0.5f, 0.8f, glm::vec3{ 0.0f, 0.0f, -1.0f }, glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f }, glm::vec3{ 0.0f, -7.0f, 0.0f }, glm::vec3{ 0.0f }, 2 };
-
-	Sphere rockyPlanet2{ 3.0f, 5.0f, 0.5f, 0.8f, glm::vec3{ 10.0f, 0.0f, -2.0f }, glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f }, glm::vec3{ 7.0f, 0.0f, 0.0f }, glm::vec3{ 0.0f }, 2 };
-
-	_spheres.push_back(star);
-	_spheres.push_back(waterPlanet);
-	_spheres.push_back(waterPlanet2);
-	_spheres.push_back(rockyPlanet);
-	_spheres.push_back(rockyPlanet2);
+	InitializeSolarSystem();
 }
 
 Simulation::~Simulation() { }
 
-void Simulation::StepSimulation(bool paused, float deltaTime, const SimulationInput& userInput)
+void Simulation::StepSimulation(bool paused, bool fastMove, bool slowMove, float deltaTime, const SimulationInput& userInput)
 {
 	_camera->SetAspectRatio(static_cast<float>(userInput.windowWidth) / static_cast<float>(userInput.windowHeight));
 
@@ -85,7 +43,12 @@ void Simulation::StepSimulation(bool paused, float deltaTime, const SimulationIn
 	if (glm::length(movement) > 0.0f)
 	{
 		movement = glm::normalize(movement);
-		cameraPosition += movement * deltaTime * CAMERA_MOVE_SPEED;
+
+		float speed{ CAMERA_MOVE_SPEED };
+		if (fastMove) speed *= FAST_MOVE_FACTOR;
+		if (slowMove) speed *= SLOW_MOVE_FACTOR;
+
+		cameraPosition += movement * deltaTime * speed;
 	}
 
 	if (paused) return;
@@ -119,9 +82,9 @@ SimulationGPUState Simulation::GetGPUState() const
 	for (std::size_t s{}; s < sphereCount; ++s)
 	{
 		const Sphere& sphere{ _spheres[s] };
-		_gpuSpheres[s] = sphere.ToGPUData();
-
 		const Material& material{ _materials[sphere.materialIndex] };
+		_gpuSpheres[s] = sphere.ToGPUData(glm::length(material.emission) > 0.0f ? STAR_RENDER_SCALE : PLANET_RENDER_SCALE);
+
 		if (glm::length(material.emission) > 0.0f)
 		{
 			float luminosity{ 0.2126f * material.emission.r +
@@ -143,6 +106,207 @@ std::vector<MaterialGPUData> Simulation::GetMaterialGPUData() const
 		gpuMaterials[m] = _materials[m].ToGPUData();
 	}
 	return gpuMaterials;
+}
+
+void Simulation::InitializeSolarSystem()
+{
+	Material sunMaterial{
+	.albedo = glm::vec3{ 1.0f, 0.65f, 0.25f },
+	.roughness = 0.25f,
+	.specular = 0.0f,
+	.indexOfRefraction = 1.0f,
+	.emission = glm::vec3{ 5000.0f, 2750.0f, 1100.0f }
+	};
+	_materials.push_back(sunMaterial);
+
+	Material mercuryMaterial{
+		.albedo = glm::vec3{ 0.30f, 0.28f, 0.25f },
+		.roughness = 0.65f,
+		.specular = 0.04f,
+		.indexOfRefraction = 1.50f,
+		.emission = glm::vec3{ 0.0f }
+	};
+	_materials.push_back(mercuryMaterial);
+
+	Material venusMaterial{
+		.albedo = glm::vec3{ 0.75f, 0.65f, 0.45f },
+		.roughness = 0.80f,
+		.specular = 0.04f,
+		.indexOfRefraction = 1.45f,
+		.emission = glm::vec3{ 0.0f }
+	};
+	_materials.push_back(venusMaterial);
+
+	Material earthMaterial{
+		.albedo = glm::vec3{ 0.18f, 0.30f, 0.22f },
+		.roughness = 0.60f,
+		.specular = 0.04f,
+		.indexOfRefraction = 1.33f,
+		.emission = glm::vec3{ 0.0f }
+	};
+	_materials.push_back(earthMaterial);
+
+	Material marsMaterial{
+		.albedo = glm::vec3{ 0.55f, 0.20f, 0.10f },
+		.roughness = 0.85f,
+		.specular = 0.04f,
+		.indexOfRefraction = 1.50f,
+		.emission = glm::vec3{ 0.0f }
+	};
+	_materials.push_back(marsMaterial);
+
+	Material jupiterMaterial{
+		.albedo = glm::vec3{ 0.65f, 0.52f, 0.32f },
+		.roughness = 0.75f,
+		.specular = 0.04f,
+		.indexOfRefraction = 1.40f,
+		.emission = glm::vec3{ 0.0f }
+	};
+	_materials.push_back(jupiterMaterial);
+
+	Material saturnMaterial{
+		.albedo = glm::vec3{ 0.72f, 0.60f, 0.38f },
+		.roughness = 0.75f,
+		.specular = 0.04f,
+		.indexOfRefraction = 1.40f,
+		.emission = glm::vec3{ 0.0f }
+	};
+	_materials.push_back(saturnMaterial);
+
+	Material uranusMaterial{
+		.albedo = glm::vec3{ 0.35f, 0.70f, 0.78f },
+		.roughness = 0.70f,
+		.specular = 0.04f,
+		.indexOfRefraction = 1.38f,
+		.emission = glm::vec3{ 0.0f }
+	};
+	_materials.push_back(uranusMaterial);
+
+	Material neptuneMaterial{
+		.albedo = glm::vec3{ 0.12f, 0.35f, 0.70f },
+		.roughness = 0.70f,
+		.specular = 0.04f,
+		.indexOfRefraction = 1.38f,
+		.emission = glm::vec3{ 0.0f }
+	};
+	_materials.push_back(neptuneMaterial);
+
+	Sphere sun{
+		0.6957f, // radius
+		1.0f, // mass
+		0.0f, // restitution
+		0.0f, // friction
+		{ 0.0f, 0.0f, 0.0f }, // position
+		{ 1.0f, 0.0f, 0.0f, 0.0f }, // rotation
+		{ -0.0001972194f, 0.0012223776f, 0.0f }, // velocity
+		{ 0.0f, 0.0f, 0.0f }, // angular velocity
+		0 // material index
+	};
+	_spheres.push_back(sun);
+
+	Sphere mercury{
+		0.0024395f,
+		1.65962583e-7f,
+		0.1f,
+		0.8f,
+		{ 57.9f, 0.0f, 0.0f },
+		{ 1.0f, 0.0f, 0.0f, 0.0f },
+		{ 0.0f, 4.13653631f, 0.0f },
+		{ 0.0f, 0.0f, 0.0f },
+		1
+	};
+	_spheres.push_back(mercury);
+
+	Sphere venus{
+		0.006052f,
+		2.44920539e-6f,
+		0.1f,
+		0.8f,
+		{ 76.5089537f, 76.5089537f, 0.0f },
+		{ 1.0f, 0.0f, 0.0f, 0.0f },
+		{ -2.13967343f, 2.13967343f, 0.0f },
+		{ 0.0f, 0.0f, 0.0f },
+		2
+	};
+	_spheres.push_back(venus);
+
+	Sphere earth{
+		0.006378f,
+		3.00241400e-6f,
+		0.1f,
+		0.8f,
+		{ 0.0f, 149.6f, 0.0f },
+		{ 1.0f, 0.0f, 0.0f, 0.0f },
+		{ -2.57341795f, 0.0f, 0.0f },
+		{ 0.0f, 0.0f, 0.0f },
+		3
+	};
+	_spheres.push_back(earth);
+
+	Sphere mars{
+		0.003396f,
+		3.22872661e-7f,
+		0.1f,
+		0.8f,
+		{ -161.220346f, 161.220346f, 0.0f },
+		{ 1.0f, 0.0f, 0.0f, 0.0f },
+		{ -1.47398716f, -1.47398716f, 0.0f },
+		{ 0.0f, 0.0f, 0.0f },
+		4
+	};
+	_spheres.push_back(mars);
+
+	Sphere jupiter{
+		0.071492f,
+		9.54536311e-4f,
+		0.05f,
+		0.3f,
+		{ -778.5f, 0.0f, 0.0f },
+		{ 1.0f, 0.0f, 0.0f, 0.0f },
+		{ 0.0f, -1.12809796f, 0.0f },
+		{ 0.0f, 0.0f, 0.0f },
+		5
+	};
+	_spheres.push_back(jupiter);
+
+	Sphere saturn{
+		0.060268f,
+		2.85656809e-4f,
+		0.05f,
+		0.3f,
+		{ -1012.576911f, -1012.576911f, 0.0f },
+		{ 1.0f, 0.0f, 0.0f, 0.0f },
+		{ 0.58815205f, -0.58815205f, 0.0f },
+		{ 0.0f, 0.0f, 0.0f },
+		6
+	};
+	_spheres.push_back(saturn);
+
+	Sphere uranus{
+		0.025559f,
+		4.36531885e-5f,
+		0.05f,
+		0.3f,
+		{ 0.0f, -2867.0f, 0.0f },
+		{ 1.0f, 0.0f, 0.0f, 0.0f },
+		{ 0.58784425f, 0.0f, 0.0f },
+		{ 0.0f, 0.0f, 0.0f },
+		7
+	};
+	_spheres.push_back(uranus);
+
+	Sphere neptune{
+		0.024764f,
+		5.12975256e-5f,
+		0.05f,
+		0.3f,
+		{ 3192.587117f, -3192.587117f, 0.0f },
+		{ 1.0f, 0.0f, 0.0f, 0.0f },
+		{ 0.33123197f, 0.33123197f, 0.0f },
+		{ 0.0f, 0.0f, 0.0f },
+		8
+	};
+	_spheres.push_back(neptune);
 }
 
 glm::vec3 Simulation::CalculateAcceleration(size_t index) const

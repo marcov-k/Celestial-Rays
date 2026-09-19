@@ -45,7 +45,7 @@ int main()
 
 			if (!window.Focused() || window.Width() == 0 || window.Height() == 0) continue;
 
-			simulation.StepSimulation(window.Paused(), deltaTime, simulationInput);
+			simulation.StepSimulation(window.Paused(), window.FastMovement(), window.SlowMovement(), deltaTime, simulationInput);
 
 			renderer.Render(simulation.GetGPUState(), frameIndex);
 

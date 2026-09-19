@@ -19,16 +19,20 @@ public:
 	Simulation(float fieldOfView, std::uint32_t windowWidth, std::uint32_t windowHeight);
 	~Simulation();
 
-	void StepSimulation(bool paused, float deltaTime, const SimulationInput& userInput);
+	void StepSimulation(bool paused, bool fastMove, bool slowMove, float deltaTime, const SimulationInput& userInput);
 
 	SimulationGPUState GetGPUState() const;
 	std::vector<MaterialGPUData> GetMaterialGPUData() const;
 
 private:
 	static const glm::vec3 WORLD_UP;
-	static constexpr float GRAVITY_CONSTANT{ 1.0f };
+	static constexpr float GRAVITY_CONSTANT{ 990.723f };
 	static constexpr float MOUSE_SENSITIVITY{ 0.005f };
-	static constexpr float CAMERA_MOVE_SPEED{ 15.0f };
+	static constexpr float CAMERA_MOVE_SPEED{ 30.0f };
+	static constexpr float FAST_MOVE_FACTOR{ 10.0f };
+	static constexpr float SLOW_MOVE_FACTOR{ 0.2f };
+	static constexpr float PLANET_RENDER_SCALE{ 100.0f };
+	static constexpr float STAR_RENDER_SCALE{ 10.0f };
 	static constexpr size_t PARALLEL_THRESHOLD{ 300 };
 	static constexpr float EPSILON{ 0.001f };
 
@@ -39,6 +43,8 @@ private:
 
 	mutable std::vector<SphereGPUData> _gpuSpheres{};
 	mutable std::vector<EmitterGPUData> _gpuEmitters{};
+
+	void InitializeSolarSystem();
 
 	glm::vec3 CalculateAcceleration(size_t index) const;
 	void UpdateVelocity(size_t index, const glm::vec3& acceleration, float deltaTime);

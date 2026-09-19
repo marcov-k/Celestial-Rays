@@ -30,7 +30,7 @@ export struct Sphere
 	glm::vec3 angularVelocity{};
 	std::uint32_t materialIndex{};
 
-	SphereGPUData ToGPUData() const;
+	SphereGPUData ToGPUData(float renderScale = 1.0f) const;
 };
 
 export struct Material

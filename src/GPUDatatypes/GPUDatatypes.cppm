@@ -52,7 +52,7 @@ static_assert(alignof(CameraGPUData) == 16);
 
 export struct alignas(16) SphereGPUData
 {
-	GPUVec4 spatialData{}; // (x, y, z, radius)
+	GPUVec4 spatialData{}; // (x, y, z, render radius)
 	GPUVec4 rotation{};
 	std::uint32_t materialIndex{};
 };

@@ -16,8 +16,8 @@ Sphere::Sphere(float radius, float mass, float restitution, float friction,
 		materialIndex(materialIndex)
 { }
 
-SphereGPUData Sphere::ToGPUData() const
+SphereGPUData Sphere::ToGPUData(float renderScale) const
 {
-	return { GPUVec4{ position.x, position.y, position.z, radius },
+	return { GPUVec4{ position.x, position.y, position.z, radius * renderScale },
 		GPUVec4{ rotation.w, rotation.x, rotation.y, rotation.z }, materialIndex };
 }
