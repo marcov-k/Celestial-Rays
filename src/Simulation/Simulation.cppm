@@ -19,15 +19,17 @@ public:
 	Simulation(float fieldOfView, std::uint32_t windowWidth, std::uint32_t windowHeight);
 	~Simulation();
 
-	void StepSimulation(float deltaTime, const SimulationInput& userInput);
+	void StepSimulation(bool paused, float deltaTime, const SimulationInput& userInput);
 
 	SimulationGPUState GetGPUState() const;
 	std::vector<MaterialGPUData> GetMaterialGPUData() const;
 
 private:
 	static const glm::vec3 WORLD_UP;
+	static constexpr float GRAVITY_CONSTANT{ 1.0f };
 	static constexpr float MOUSE_SENSITIVITY{ 0.005f };
 	static constexpr float CAMERA_MOVE_SPEED{ 15.0f };
+	static constexpr size_t PARALLEL_THRESHOLD{ 300 };
 	static constexpr float EPSILON{ 0.001f };
 
 	std::optional<Camera> _camera;
@@ -36,4 +38,10 @@ private:
 	std::vector<Material> _materials{};
 
 	mutable std::vector<SphereGPUData> _gpuSpheres{};
+
+	glm::vec3 CalculateAcceleration(size_t index) const;
+	void UpdateVelocity(size_t index, const glm::vec3& acceleration, float deltaTime);
+	void PrepareNewPosition(size_t index, float deltaTime);
+	void ResolveCollisions();
+	void UpdateCurrentPosition(size_t index);
 };

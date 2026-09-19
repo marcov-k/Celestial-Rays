@@ -39,13 +39,13 @@ int main()
 			auto currentTime{ std::chrono::steady_clock::now() };
 
 			float deltaTime{ std::chrono::duration<float>(currentTime - previousTime).count() };
-			std::println("FPS: {}", 1.0f / deltaTime);
+			// std::println("FPS: {}", 1.0f / deltaTime);
 
 			previousTime = currentTime;
 
 			if (!window.Focused() || window.Width() == 0 || window.Height() == 0) continue;
 
-			simulation.StepSimulation(deltaTime, simulationInput);
+			simulation.StepSimulation(window.Paused(), deltaTime, simulationInput);
 
 			renderer.Render(simulation.GetGPUState(), frameIndex);
 

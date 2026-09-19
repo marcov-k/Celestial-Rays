@@ -28,6 +28,7 @@ target_compile_definitions(Celestial-Rays PRIVATE
 
 find_package(Vulkan REQUIRED)
 find_package(glm CONFIG REQUIRED)
+find_package(OpenMP REQUIRED COMPONENTS CXX)
 
 find_program(GLSLC_EXECUTABLE
 	NAMES glslc
@@ -37,6 +38,7 @@ find_program(GLSLC_EXECUTABLE
 target_link_libraries(Celestial-Rays PRIVATE
 	Vulkan::Vulkan
 	glm::glm
+	OpenMP::OpenMP_CXX
 )
 
 set(GRADIENT_SHADER_SOURCE

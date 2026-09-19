@@ -28,6 +28,7 @@ public:
 	bool Resized() const noexcept;
 	void ClearResizedFlag() noexcept;
 	bool Focused() const noexcept;
+	bool Paused() const noexcept;
 
 	std::uint32_t Width() const noexcept;
 	std::uint32_t Height() const noexcept;
@@ -49,6 +50,7 @@ private:
 	bool _shouldClose{};
 	bool _resized{};
 	bool _focused{ true };
+	bool _paused{ true };
 	bool _cameraMode{ false };
 	bool _setMousePos{ false };
 	int _mouseDefaultX{};
@@ -66,4 +68,5 @@ private:
 	void EnableCameraMode();
 	void DisableCameraMode();
 	void HandleMouseMove(LPARAM lParam);
+	void HandleToggles(WPARAM keyIndex);
 };

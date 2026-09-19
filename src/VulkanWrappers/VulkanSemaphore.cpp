@@ -12,7 +12,7 @@ VulkanSemaphore::VulkanSemaphore(VkDevice device, const VkSemaphoreCreateInfo* p
 {
 	VkResult result{ vkCreateSemaphore(_device, pCreateInfo, GetAllocator(), &_semaphore) };
 
-	if (result != VK_SUCCESS) std::runtime_error("Failed to create Vulkan semaphore");
+	if (result != VK_SUCCESS) throw std::runtime_error("Failed to create Vulkan semaphore");
 }
 
 VulkanSemaphore::~VulkanSemaphore()

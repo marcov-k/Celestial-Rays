@@ -105,6 +105,7 @@ LRESULT CALLBACK Window::WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
 
 		case WM_KEYDOWN:
 			window->_keys[wParam] = true;
+			window->HandleToggles(wParam);
 			return 0;
 
 		case WM_SYSKEYDOWN:
@@ -187,6 +188,11 @@ void Window::ClearResizedFlag() noexcept
 bool Window::Focused() const noexcept
 {
 	return _focused;
+}
+
+bool Window::Paused() const noexcept
+{
+	return _paused;
 }
 
 std::uint32_t Window::Width() const noexcept
@@ -292,5 +298,15 @@ void Window::HandleMouseMove(LPARAM lParam)
 	{
 		_mouseX = newX;
 		_mouseY = newY;
+	}
+}
+
+void Window::HandleToggles(WPARAM keyIndex)
+{
+	switch (keyIndex)
+	{
+	case VK_SPACE:
+		_paused = !_paused;
+		break;
 	}
 }
