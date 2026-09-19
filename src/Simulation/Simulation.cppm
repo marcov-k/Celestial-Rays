@@ -44,4 +44,5 @@ private:
 	void PrepareNewPosition(size_t index, float deltaTime);
 	void ResolveCollisions();
 	void UpdateCurrentPosition(size_t index);
+	void UpdateRotation(size_t index, float deltaTime);
 };

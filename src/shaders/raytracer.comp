@@ -28,6 +28,7 @@ layout(std430, binding = 1) readonly buffer CameraDataBuffer
 struct Sphere
 {
 	vec4 spatialData; // (x, y, z, radius)
+	vec4 rotation;
 	uint materialIndex;
 };
 

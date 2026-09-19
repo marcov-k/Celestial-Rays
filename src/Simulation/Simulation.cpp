@@ -1,6 +1,7 @@
 module;
 
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include <omp.h>
 
@@ -47,15 +48,15 @@ Simulation::Simulation(float fieldOfView, std::uint32_t windowWidth, std::uint32
 	_materials.push_back(waterPlanetMaterial);
 	_materials.push_back(rockyPlanetMaterial);
 
-	Sphere star{ 10.0f, 4000.0f, glm::vec3{ 0.0f, 0.0f, 50.0f }, glm::vec3{ 0.0f, 0.0f, 0.0f }, 0 };
+	Sphere star{ 10.0f, 3500.0f, 0.5f, 0.7f, glm::vec3{ 0.0f, 0.0f, 50.0f }, glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f }, glm::vec3{ 0.0f, 0.0f, 0.0f }, glm::vec3{ 0.0f }, 0 };
 
-	Sphere waterPlanet{ 1.0f, 1.0f, glm::vec3{ 0.0f, 1.0f, -6.0f }, glm::vec3{ 5.0f, 5.0f, 0.0f }, 1 };
+	Sphere waterPlanet{ 1.0f, 1.0f, 0.5f, 0.3f, glm::vec3{ 0.0f, 1.0f, -6.0f }, glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f }, glm::vec3{ 5.0f, 5.0f, 0.0f }, glm::vec3{ 0.0f }, 1 };
 
-	Sphere waterPlanet2{ 7.0f, 3.0f, glm::vec3{ -15.0f, 0.0f, -3.0f }, glm::vec3{ 5.0f, 5.0f, 0.0f }, 1 };
+	Sphere waterPlanet2{ 7.0f, 3.0f, 0.5f, 0.3f, glm::vec3{ -15.0f, 0.0f, -3.0f }, glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f }, glm::vec3{ 5.0f, 5.0f, 0.0f }, glm::vec3{ 0.0f }, 1 };
 
-	Sphere rockyPlanet{ 1.5f, 2.0f, glm::vec3{ 0.0f, 0.0f, -1.0f }, glm::vec3{ 0.0f, -7.0f, 0.0f }, 2 };
+	Sphere rockyPlanet{ 1.5f, 2.0f, 0.5f, 0.8f, glm::vec3{ 0.0f, 0.0f, -1.0f }, glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f }, glm::vec3{ 0.0f, -7.0f, 0.0f }, glm::vec3{ 0.0f }, 2 };
 
-	Sphere rockyPlanet2{ 3.0f, 5.0f, glm::vec3{ 10.0f, 0.0f, -2.0f }, glm::vec3{ 7.0f, 0.0f, 0.0f }, 2 };
+	Sphere rockyPlanet2{ 3.0f, 5.0f, 0.5f, 0.8f, glm::vec3{ 10.0f, 0.0f, -2.0f }, glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f }, glm::vec3{ 7.0f, 0.0f, 0.0f }, glm::vec3{ 0.0f }, 2 };
 
 	_spheres.push_back(star);
 	_spheres.push_back(waterPlanet);
@@ -106,6 +107,7 @@ void Simulation::StepSimulation(bool paused, float deltaTime, const SimulationIn
 	for (std::int64_t i{}; i < sphereCount; ++i)
 	{
 		UpdateCurrentPosition(i);
+		UpdateRotation(i, deltaTime);
 	}
 }
 
@@ -169,6 +171,8 @@ void Simulation::ResolveCollisions()
 		for (size_t o{ s + 1 }; o < sphereCount; ++o)
 		{
 			Sphere& other{ _spheres[o] };
+			
+			// Resolve position
 
 			glm::vec3 diff{ other.nextPosition - sphere.nextPosition };
 			float dist{ glm::length(diff) };
@@ -181,15 +185,60 @@ void Simulation::ResolveCollisions()
 
 			float penetration{ minDist - dist };
 
-			glm::vec3 dir{};
-			if (dist == 0.0f) dir = glm::vec3{ 1.0f, 0.0f, 0.0f };
-			else dir = glm::normalize(diff);
+			glm::vec3 normal{};
+			if (dist == 0.0f) normal = glm::vec3{ 1.0f, 0.0f, 0.0f };
+			else normal = glm::normalize(diff);
 
 			float sphereCorrection{ -penetration * sphere.inverseMass / inverseMassSum };
 			float otherCorrection{ penetration * other.inverseMass / inverseMassSum };
 
-			sphere.nextPosition += sphereCorrection * dir;
-			other.nextPosition += otherCorrection * dir;
+			sphere.nextPosition += sphereCorrection * normal;
+			other.nextPosition += otherCorrection * normal;
+
+			if (dist == 0.0f) continue;
+
+			// Resolve impulse
+
+			glm::vec3 sphereContactPoint{ sphere.radius * normal };
+			glm::vec3 sphereContactVelocity{ sphere.velocity + glm::cross(sphere.angularVelocity, sphereContactPoint) };
+
+			glm::vec3 otherContactPoint{ -other.radius * normal };
+			glm::vec3 otherContactVelocity{ other.velocity + glm::cross(other.angularVelocity, otherContactPoint) };
+
+			glm::vec3 relativeVelocity{ otherContactVelocity - sphereContactVelocity };
+
+			float relativeNormalVelocity{ glm::dot(relativeVelocity, normal) };
+			if (relativeNormalVelocity >= 0.0f) continue;
+			glm::vec3 normalVelocity{ relativeNormalVelocity * normal };
+			glm::vec3 tangentVelocity{ relativeVelocity - normalVelocity };
+
+			float e{ (other.restitution + sphere.restitution) / 2.0f };
+			float cof{ (other.friction + sphere.friction) / 2.0f };
+
+			float normalImpulse{ -(1.0f + e) * relativeNormalVelocity / inverseMassSum };
+			glm::vec3 normalImpulseVec{ normalImpulse * normal };
+
+			sphere.velocity -= normalImpulseVec * sphere.inverseMass;
+			other.velocity += normalImpulseVec * other.inverseMass;
+
+			if (glm::length(tangentVelocity) <= 0.0f) continue;
+
+			glm::vec3 tangent{ glm::normalize(tangentVelocity) };
+
+			float tangentEffectiveMass{ inverseMassSum +
+				sphere.radiusSquare * sphere.inverseMomentOfInertia +
+				other.radiusSquare * other.inverseMomentOfInertia };
+
+			float tangentImpulse{ -glm::dot(relativeVelocity, tangent) / tangentEffectiveMass };
+			float maxTangentImpulse{ cof * normalImpulse };
+			tangentImpulse = std::clamp(tangentImpulse, -maxTangentImpulse, maxTangentImpulse);
+			glm::vec3 tangentImpulseVec{ tangentImpulse * tangent };
+
+			sphere.velocity -= tangentImpulseVec * sphere.inverseMass;
+			other.velocity += tangentImpulseVec * other.inverseMass;
+
+			sphere.angularVelocity += sphere.inverseMomentOfInertia * glm::cross(sphereContactPoint, tangentImpulseVec);
+			other.angularVelocity += other.inverseMomentOfInertia * glm::cross(otherContactPoint, tangentImpulseVec);
 		}
 	}
 }
@@ -197,4 +246,15 @@ void Simulation::ResolveCollisions()
 void Simulation::UpdateCurrentPosition(size_t index)
 {
 	_spheres[index].position = _spheres[index].nextPosition;
+}
+
+void Simulation::UpdateRotation(size_t index, float deltaTime)
+{
+	Sphere& sphere{ _spheres[index] };
+
+	glm::quat angularVelocityQuat{ 0.0f, sphere.angularVelocity };
+
+	sphere.rotation += 0.5f * angularVelocityQuat * sphere.rotation * deltaTime;
+
+	sphere.rotation = glm::normalize(sphere.rotation);
 }
