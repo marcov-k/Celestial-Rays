@@ -38,6 +38,10 @@ void Renderer::Render(const SimulationGPUState& simulationState, std::uint32_t f
 	GrowSphereBuffer(sphereCount);
 	_sphereBuffer->Write(simulationState.sphereData.data(), sphereCount * sizeof(SphereGPUData), 0);
 
+	std::uint32_t emitterCount{ static_cast<std::uint32_t>(simulationState.emitterData.size()) };
+	GrowEmitterBuffer(emitterCount);
+	_emitterBuffer->Write(simulationState.emitterData.data(), emitterCount * sizeof(EmitterGPUData), 0);
+
 	VkCommandBuffer commandBuffer{ _context.GetCommandBuffer() };
 	const VkExtent2D& renderImageExtent{ _context.GetRenderImageExtent() };
 
@@ -46,7 +50,13 @@ void Renderer::Render(const SimulationGPUState& simulationState, std::uint32_t f
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _pipelineLayout->GetPipelineLayout(),
 		0, 1, &_descriptorSet, 0, nullptr);
 
-	PushConstants pushConstants{ sphereCount, frameIndex };
+	float emitterWeightSum{};
+	for (auto& emitter : simulationState.emitterData)
+	{
+		emitterWeightSum += emitter.selectionWeight;
+	}
+
+	PushConstants pushConstants{ sphereCount, emitterCount, emitterWeightSum, frameIndex };
 
 	vkCmdPushConstants(commandBuffer, _pipelineLayout->GetPipelineLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pushConstants);
 
@@ -70,6 +80,10 @@ void Renderer::AllocateBuffers()
 	_sphereBuffer = _context.CreateBuffer(sizeof(SphereGPUData), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 	_sphereBufferCapacity = 1;
+
+	_emitterBuffer = _context.CreateBuffer(sizeof(EmitterGPUData), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	_emitterBufferCapacity = 1;
 
 	_materialBuffer = _context.CreateBuffer(_materialCount * sizeof(MaterialGPUData),
 		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
@@ -104,6 +118,34 @@ void Renderer::GrowSphereBuffer(std::uint64_t sphereCount)
 	_context.UpdateDescriptorSet(writeSphereBuffer);
 }
 
+void Renderer::GrowEmitterBuffer(std::uint64_t emitterCount)
+{
+	if (emitterCount <= _emitterBufferCapacity) return;
+
+	while (_emitterBufferCapacity < emitterCount) _emitterBufferCapacity *= 2;
+
+	_emitterBuffer = _context.CreateBuffer(_emitterBufferCapacity * sizeof(EmitterGPUData),
+		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+		VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	VkDescriptorBufferInfo emitterBufferInfo{
+		.buffer = _emitterBuffer->GetBuffer(),
+		.offset = 0,
+		.range = _emitterBufferCapacity * sizeof(EmitterGPUData)
+	};
+
+	VkWriteDescriptorSet writeEmitterBuffer{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = _descriptorSet,
+		.dstBinding = 3,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &emitterBufferInfo
+	};
+
+	_context.UpdateDescriptorSet(writeEmitterBuffer);
+}
+
 void Renderer::CreateDescriptorSetLayout()
 {
 	VkDescriptorSetLayoutBinding renderImageBinding{
@@ -127,15 +169,22 @@ void Renderer::CreateDescriptorSetLayout()
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
 	};
 
-	VkDescriptorSetLayoutBinding materialBufferBinding{
+	VkDescriptorSetLayoutBinding emitterBufferBinding{
 		.binding = 3,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
 	};
 
+	VkDescriptorSetLayoutBinding materialBufferBinding{
+		.binding = 4,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+	};
+
 	_descriptorLayout = _context.CreateDescriptorSetLayout({ renderImageBinding, cameraBufferBinding,
-		sphereBufferBinding, materialBufferBinding });
+		sphereBufferBinding, emitterBufferBinding, materialBufferBinding });
 }
 
 void Renderer::CreateDescriptorPool()
@@ -155,13 +204,18 @@ void Renderer::CreateDescriptorPool()
 		.descriptorCount = 1
 	};
 
+	VkDescriptorPoolSize emitterBufferPool{
+		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1
+	};
+
 	VkDescriptorPoolSize materialBufferPool{
 		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = 1
 	};
 
 	_descriptorPool = _context.CreateDescriptorPool({ renderImagePool, cameraBufferPool, sphereBufferPool,
-		materialBufferPool }, 1);
+		emitterBufferPool, materialBufferPool }, 1);
 }
 
 void Renderer::AllocateDescriptorSet()
@@ -236,6 +290,21 @@ void Renderer::UpdateDescriptorSet() const
 		.pBufferInfo = &sphereBufferInfo
 	};
 
+	VkDescriptorBufferInfo emitterBufferInfo{
+		.buffer = _emitterBuffer->GetBuffer(),
+		.offset = 0,
+		.range = _emitterBufferCapacity * sizeof(EmitterGPUData)
+	};
+
+	VkWriteDescriptorSet writeEmitterBuffer{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = _descriptorSet,
+		.dstBinding = 3,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &emitterBufferInfo
+	};
+
 	VkDescriptorBufferInfo materialBufferInfo{
 		.buffer = _materialBuffer->GetBuffer(),
 		.offset = 0,
@@ -245,12 +314,12 @@ void Renderer::UpdateDescriptorSet() const
 	VkWriteDescriptorSet writeMaterialBuffer{
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 		.dstSet = _descriptorSet,
-		.dstBinding = 3,
+		.dstBinding = 4,
 		.descriptorCount = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.pBufferInfo = &materialBufferInfo
 	};
 
 	_context.UpdateDescriptorSets({ writeRenderImage, writeCameraBuffer, writeSphereBuffer,
-		writeMaterialBuffer });
+		writeEmitterBuffer, writeMaterialBuffer });
 }

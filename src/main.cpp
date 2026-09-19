@@ -39,7 +39,7 @@ int main()
 			auto currentTime{ std::chrono::steady_clock::now() };
 
 			float deltaTime{ std::chrono::duration<float>(currentTime - previousTime).count() };
-			// std::println("FPS: {}", 1.0f / deltaTime);
+			std::println("FPS: {}", 1.0f / deltaTime);
 
 			previousTime = currentTime;
 

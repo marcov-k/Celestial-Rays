@@ -30,6 +30,8 @@ private:
 	std::unique_ptr<VulkanBuffer> _cameraBuffer;
 	std::unique_ptr<VulkanBuffer> _sphereBuffer;
 	std::uint64_t _sphereBufferCapacity{};
+	std::unique_ptr<VulkanBuffer> _emitterBuffer;
+	std::uint64_t _emitterBufferCapacity{};
 	std::unique_ptr<VulkanBuffer> _materialBuffer;
 	std::uint64_t _materialCount{};
 
@@ -44,6 +46,7 @@ private:
 
 	void AllocateBuffers();
 	void GrowSphereBuffer(std::uint64_t sphereCount);
+	void GrowEmitterBuffer(std::uint64_t emitterCount);
 
 	void CreateDescriptorSetLayout();
 	void CreateDescriptorPool();

@@ -60,9 +60,20 @@ export struct alignas(16) SphereGPUData
 static_assert(sizeof(SphereGPUData) == 48);
 static_assert(alignof(SphereGPUData) == 16);
 
+export struct alignas(16) EmitterGPUData
+{
+	float selectionWeight{};
+	std::uint32_t sphereIndex{};
+};
+
+static_assert(sizeof(EmitterGPUData) == 16);
+static_assert(alignof(EmitterGPUData) == 16);
+
 export struct PushConstants
 {
 	std::uint32_t sphereCount{};
+	std::uint32_t emitterCount{};
+	float emitterWeightSum{};
 	std::uint32_t frameIndex{};
 };
 
@@ -70,6 +81,7 @@ export struct SimulationGPUState
 {
 	CameraGPUData cameraData;
 	std::vector<SphereGPUData>& sphereData;
+	std::vector<EmitterGPUData>& emitterData;
 };
 
 export struct alignas(16) MaterialGPUData

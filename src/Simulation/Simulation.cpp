@@ -115,12 +115,23 @@ SimulationGPUState Simulation::GetGPUState() const
 {
 	std::size_t sphereCount{ _spheres.size() };
 	_gpuSpheres.resize(sphereCount);
+	_gpuEmitters.clear();
 	for (std::size_t s{}; s < sphereCount; ++s)
 	{
-		_gpuSpheres[s] = _spheres[s].ToGPUData();
+		const Sphere& sphere{ _spheres[s] };
+		_gpuSpheres[s] = sphere.ToGPUData();
+
+		const Material& material{ _materials[sphere.materialIndex] };
+		if (glm::length(material.emission) > 0.0f)
+		{
+			float luminosity{ 0.2126f * material.emission.r +
+				0.7152f * material.emission.g + 0.0722f * material.emission.b };
+			float samplingWeight{ luminosity * sphere.radiusSquare };
+			_gpuEmitters.push_back({ samplingWeight, static_cast<std::uint32_t>(s) });
+		}
 	}
 
-	return { _camera->GetGPUData(), _gpuSpheres };
+	return { _camera->GetGPUData(), _gpuSpheres, _gpuEmitters };
 }
 
 std::vector<MaterialGPUData> Simulation::GetMaterialGPUData() const

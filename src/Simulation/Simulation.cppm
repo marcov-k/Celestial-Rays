@@ -38,6 +38,7 @@ private:
 	std::vector<Material> _materials{};
 
 	mutable std::vector<SphereGPUData> _gpuSpheres{};
+	mutable std::vector<EmitterGPUData> _gpuEmitters{};
 
 	glm::vec3 CalculateAcceleration(size_t index) const;
 	void UpdateVelocity(size_t index, const glm::vec3& acceleration, float deltaTime);
