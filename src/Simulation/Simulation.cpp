@@ -6,10 +6,15 @@ module;
 #include <omp.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstdint>
+#include <limits>
+#include <mutex>
 #include <numbers>
 #include <optional>
 #include <print>
+#include <thread>
 
 module Celestial.Simulation;
 
@@ -19,13 +24,48 @@ Simulation::Simulation(float fieldOfView, std::uint32_t windowWidth, std::uint32
 {
 	float aspectRatio{ static_cast<float>(windowWidth) / static_cast<float>(windowHeight) };
 	_camera.emplace(fieldOfView, aspectRatio, glm::vec3{ 0.0f, 0.0f, 0.0f }, glm::vec2{ 0.0f, 0.0f });
+	InitializeSnapshots();
 
 	InitializeSolarSystem();
+
+	PublishSnapshot();
 }
 
-Simulation::~Simulation() { }
+Simulation::~Simulation()
+{
+	_simulationThread.request_stop();
+	_simulationThread.join();
+}
 
-void Simulation::StepSimulation(bool paused, bool fastMove, bool slowMove, float deltaTime, const SimulationInput& userInput)
+void Simulation::SetPaused(bool paused)
+{
+	_paused.store(paused, std::memory_order_relaxed);
+}
+
+void Simulation::StartSimulation()
+{
+	_simulationThread = std::jthread([this](std::stop_token stopToken) { SimulationLoop(stopToken); });
+}
+
+void Simulation::SimulationLoop(std::stop_token stopToken)
+{
+	const auto updateInterval{ std::chrono::duration<float>(PHYSICS_TIME_STEP) };
+
+	while (!stopToken.stop_requested())
+	{
+		auto start{ std::chrono::steady_clock::now() };
+
+		if (!_paused.load(std::memory_order_relaxed))
+		{
+			UpdatePhysics(PHYSICS_TIME_STEP);
+			PublishSnapshot();
+		}
+
+		std::this_thread::sleep_until(start + updateInterval);
+	}
+}
+
+void Simulation::UpdateCamera(float deltaTime, bool fastMove, bool slowMove, const SimulationInput& userInput)
 {
 	_camera->SetAspectRatio(static_cast<float>(userInput.windowWidth) / static_cast<float>(userInput.windowHeight));
 
@@ -50,9 +90,10 @@ void Simulation::StepSimulation(bool paused, bool fastMove, bool slowMove, float
 
 		cameraPosition += movement * deltaTime * speed;
 	}
+}
 
-	if (paused) return;
-
+void Simulation::UpdatePhysics(float timeStep)
+{
 	size_t sphereCount{ _spheres.size() };
 	bool parallel{ sphereCount > PARALLEL_THRESHOLD };
 
@@ -60,8 +101,8 @@ void Simulation::StepSimulation(bool paused, bool fastMove, bool slowMove, float
 	for (std::int64_t i{}; i < sphereCount; ++i)
 	{
 		glm::vec3 acceleration{ CalculateAcceleration(i) };
-		UpdateVelocity(i, acceleration, deltaTime);
-		PrepareNewPosition(i, deltaTime);
+		UpdateVelocity(i, acceleration, timeStep);
+		PrepareNewPosition(i, timeStep);
 	}
 
 	ResolveCollisions();
@@ -70,31 +111,110 @@ void Simulation::StepSimulation(bool paused, bool fastMove, bool slowMove, float
 	for (std::int64_t i{}; i < sphereCount; ++i)
 	{
 		UpdateCurrentPosition(i);
-		UpdateRotation(i, deltaTime);
+		UpdateRotation(i, timeStep);
 	}
+}
+
+void Simulation::PublishSnapshot()
+{
+	size_t writeIndex{ FindAvailableSnapshot() };
+
+	if (writeIndex == std::numeric_limits<size_t>::max()) return;
+
+	{
+		std::lock_guard lock{ _snapshots[writeIndex].mutex };
+
+		SimulationGPUState& snapshot{ _snapshots[writeIndex].data };
+
+		size_t sphereCount{ _spheres.size() };
+
+		snapshot.sphereData.resize(sphereCount);
+		snapshot.emitterData.clear();
+
+		for (size_t s{}; s < sphereCount; ++s)
+		{
+			const Sphere& sphere{ _spheres[s] };
+			const Material& material{ _materials[sphere.materialIndex] };
+
+			bool emissive{ glm::length(material.emission) > 0.0f };
+
+			snapshot.sphereData[s] = sphere.ToGPUData(emissive ? STAR_RENDER_SCALE : PLANET_RENDER_SCALE);
+
+			if (emissive)
+			{
+				float luminosity{ 0.2126f * material.emission.r + 0.7152f * material.emission.g + 0.0722f * material.emission.b };
+				float samplingWeight{ luminosity * sphere.radiusSquare };
+				snapshot.emitterData.push_back({ samplingWeight, static_cast<std::uint32_t>(s) });
+			}
+		}
+	}
+
+	{
+		std::lock_guard lock{ _snapshotStateMutex };
+
+		size_t previousIndex{ _publishedSnapshot };
+
+		_snapshots[writeIndex].state = SnapshotState::Published;
+		_publishedSnapshot = writeIndex;
+
+		if (_snapshots[previousIndex].state == SnapshotState::Published)
+		{
+			_snapshots[previousIndex].state = SnapshotState::Available;
+		}
+	}
+}
+
+size_t Simulation::FindAvailableSnapshot()
+{
+	std::lock_guard lock{ _snapshotStateMutex };
+	size_t publishedIndex{ _publishedSnapshot };
+
+	for (size_t i{}; i < 3; ++i)
+	{
+		if (i == publishedIndex) continue;
+
+		if (_snapshots[i].state == SnapshotState::Available)
+		{
+			_snapshots[i].state = SnapshotState::Writing;
+			return i;
+		}
+	}
+
+	return std::numeric_limits<size_t>::max();
 }
 
 SimulationGPUState Simulation::GetGPUState() const
 {
-	std::size_t sphereCount{ _spheres.size() };
-	_gpuSpheres.resize(sphereCount);
-	_gpuEmitters.clear();
-	for (std::size_t s{}; s < sphereCount; ++s)
-	{
-		const Sphere& sphere{ _spheres[s] };
-		const Material& material{ _materials[sphere.materialIndex] };
-		_gpuSpheres[s] = sphere.ToGPUData(glm::length(material.emission) > 0.0f ? STAR_RENDER_SCALE : PLANET_RENDER_SCALE);
+	size_t index{};
 
-		if (glm::length(material.emission) > 0.0f)
-		{
-			float luminosity{ 0.2126f * material.emission.r +
-				0.7152f * material.emission.g + 0.0722f * material.emission.b };
-			float samplingWeight{ luminosity * sphere.radiusSquare };
-			_gpuEmitters.push_back({ samplingWeight, static_cast<std::uint32_t>(s) });
-		}
+	{
+		std::lock_guard lock{ _snapshotStateMutex };
+
+		index = _publishedSnapshot;
+
+		_snapshots[index].state = SnapshotState::Reading;
 	}
 
-	return { _camera->GetGPUData(), _gpuSpheres, _gpuEmitters };
+	SimulationGPUState state;
+
+	{
+		std::lock_guard lock{ _snapshots[index].mutex };
+
+		state = _snapshots[index].data;
+	}
+
+	{
+		std::lock_guard lock{ _snapshotStateMutex };
+
+		_snapshots[index].state = SnapshotState::Available;
+	}
+
+	return state;
+}
+
+CameraGPUData Simulation::GetCameraGPUData() const
+{
+	return _camera->GetGPUData();
 }
 
 std::vector<MaterialGPUData> Simulation::GetMaterialGPUData() const
@@ -106,6 +226,16 @@ std::vector<MaterialGPUData> Simulation::GetMaterialGPUData() const
 		gpuMaterials[m] = _materials[m].ToGPUData();
 	}
 	return gpuMaterials;
+}
+
+void Simulation::InitializeSnapshots()
+{
+	std::lock_guard lock{ _snapshotStateMutex };
+	_publishedSnapshot = 0;
+
+	_snapshots[0].state = SnapshotState::Published;
+	_snapshots[1].state = SnapshotState::Available;
+	_snapshots[2].state = SnapshotState::Available;
 }
 
 void Simulation::InitializeSolarSystem()
@@ -327,14 +457,14 @@ glm::vec3 Simulation::CalculateAcceleration(size_t index) const
 	return acceleration;
 }
 
-void Simulation::UpdateVelocity(size_t index, const glm::vec3& acceleration, float deltaTime)
+void Simulation::UpdateVelocity(size_t index, const glm::vec3& acceleration, float timeStep)
 {
-	_spheres[index].velocity += acceleration * deltaTime;
+	_spheres[index].velocity += acceleration * timeStep;
 }
 
-void Simulation::PrepareNewPosition(size_t index, float deltaTime)
+void Simulation::PrepareNewPosition(size_t index, float timeStep)
 {
-	_spheres[index].nextPosition = _spheres[index].position + _spheres[index].velocity * deltaTime;
+	_spheres[index].nextPosition = _spheres[index].position + _spheres[index].velocity * timeStep;
 }
 
 void Simulation::ResolveCollisions()
@@ -423,13 +553,13 @@ void Simulation::UpdateCurrentPosition(size_t index)
 	_spheres[index].position = _spheres[index].nextPosition;
 }
 
-void Simulation::UpdateRotation(size_t index, float deltaTime)
+void Simulation::UpdateRotation(size_t index, float timeStep)
 {
 	Sphere& sphere{ _spheres[index] };
 
 	glm::quat angularVelocityQuat{ 0.0f, sphere.angularVelocity };
 
-	sphere.rotation += 0.5f * angularVelocityQuat * sphere.rotation * deltaTime;
+	sphere.rotation += 0.5f * angularVelocityQuat * sphere.rotation * timeStep;
 
 	sphere.rotation = glm::normalize(sphere.rotation);
 }

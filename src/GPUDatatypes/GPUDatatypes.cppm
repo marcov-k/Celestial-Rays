@@ -79,9 +79,14 @@ export struct PushConstants
 
 export struct SimulationGPUState
 {
-	CameraGPUData cameraData;
-	std::vector<SphereGPUData>& sphereData;
-	std::vector<EmitterGPUData>& emitterData;
+	std::vector<SphereGPUData> sphereData{};
+	std::vector<EmitterGPUData> emitterData{};
+};
+
+export struct SnapshotHandle
+{
+	size_t index{};
+	SimulationGPUState data{};
 };
 
 export struct alignas(16) MaterialGPUData

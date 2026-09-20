@@ -4,6 +4,7 @@ module;
 #include <glm/gtc/quaternion.hpp>
 
 #include <cstdint>
+#include <mutex>
 
 export module Celestial.Simulation.Datatypes;
 
@@ -42,4 +43,19 @@ export struct Material
 	glm::vec3 emission{};
 
 	MaterialGPUData ToGPUData() const;
+};
+
+export enum class SnapshotState
+{
+	Available,
+	Writing,
+	Published,
+	Reading
+};
+
+export struct Snapshot
+{
+	SimulationGPUState data;
+	std::mutex mutex;
+	SnapshotState state{ SnapshotState::Available };
 };

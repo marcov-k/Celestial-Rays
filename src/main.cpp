@@ -31,6 +31,7 @@ int main()
 		auto previousTime{ std::chrono::steady_clock::now() };
 		std::uint32_t frameIndex{};
 
+		simulation.StartSimulation();
 		while (!window.ShouldClose())
 		{
 			window.ProcessEvents();
@@ -39,15 +40,16 @@ int main()
 			auto currentTime{ std::chrono::steady_clock::now() };
 
 			float deltaTime{ std::chrono::duration<float>(currentTime - previousTime).count() };
-			std::println("FPS: {}", 1.0f / deltaTime);
 
 			previousTime = currentTime;
 
 			if (!window.Focused() || window.Width() == 0 || window.Height() == 0) continue;
 
-			simulation.StepSimulation(window.Paused(), window.FastMovement(), window.SlowMovement(), deltaTime, simulationInput);
+			simulation.SetPaused(window.Paused());
 
-			renderer.Render(simulation.GetGPUState(), frameIndex);
+			simulation.UpdateCamera(deltaTime, window.FastMovement(), window.SlowMovement(), simulationInput);
+
+			renderer.Render(simulation.GetGPUState(), simulation.GetCameraGPUData(), frameIndex);
 
 			frameIndex++;
 		}

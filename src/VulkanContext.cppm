@@ -28,6 +28,7 @@ public:
 	[[nodiscard]]
 	bool EndFrame();
 
+	const VulkanDevice& GetDevice() const;
 	const VulkanImageView& GetRenderImageView() const;
 	const VkExtent2D& GetRenderImageExtent() const;
 	VkCommandBuffer GetCommandBuffer() const;

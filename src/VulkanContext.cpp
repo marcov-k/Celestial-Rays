@@ -389,7 +389,10 @@ VulkanContext::VulkanContext(const Window& window) : _window(window)
 
 VulkanContext::~VulkanContext()
 {
-	vkDeviceWaitIdle(_device->GetDevice());
+	if (_device)
+	{
+		vkDeviceWaitIdle(_device->GetDevice());
+	}
 }
 
 bool VulkanContext::BeginFrame()
@@ -432,6 +435,11 @@ bool VulkanContext::EndFrame()
 	}
 
 	return true;
+}
+
+const VulkanDevice& VulkanContext::GetDevice() const
+{
+	return _device.value();
 }
 
 const VulkanImageView& VulkanContext::GetRenderImageView() const

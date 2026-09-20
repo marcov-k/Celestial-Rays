@@ -26,13 +26,16 @@ Renderer::Renderer(VulkanContext& context, const std::vector<MaterialGPUData>& m
 	PushMaterials(materials);
 }
 
-Renderer::~Renderer() { }
+Renderer::~Renderer()
+{
+	vkDeviceWaitIdle(_context.GetDevice().GetDevice());
+}
 
-void Renderer::Render(const SimulationGPUState& simulationState, std::uint32_t frameIndex)
+void Renderer::Render(const SimulationGPUState& simulationState, const CameraGPUData& cameraData, std::uint32_t frameIndex)
 {
 	if (!_context.BeginFrame()) return;
 
-	_cameraBuffer->Write(&simulationState.cameraData, sizeof(CameraGPUData), 0);
+	_cameraBuffer->Write(&cameraData, sizeof(CameraGPUData), 0);
 
 	std::uint32_t sphereCount{ static_cast<std::uint32_t>(simulationState.sphereData.size()) };
 	GrowSphereBuffer(sphereCount);
