@@ -1,0 +1,72 @@
+name: Build Demo
+
+on:
+  push:
+    tags:
+      - "demo-v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get demo version
+        id: version
+        shell: pwsh
+        run: |
+          $Version = "${{ github.ref_name }}".TrimStart("demo-v")
+          echo "VERSION=$Version" >> $env:GITHUB_OUTPUT
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build demo
+        run: cmake --build build --config Release
+
+      - name: Locate build outputs
+        id: demo_files
+        shell: pwsh
+        run: |
+          $BuildDir = (Get-ChildItem "out" -Recurse -Directory -Filter x64-release |
+            Select-Object -First 1).FullName
+
+          if (-not $BuildDir) {
+            Write-Error "Could not find x64-release directory"
+            exit 1
+          }
+
+          echo "BUILDDIR=$BuildDir" >> $env:GITHUB_OUTPUT
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $Version = "${{ github.ref_name }}".TrimStart("demo-v")
+
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DAppVersion=${{ steps.version.outputs.VERSION }}" `
+            "/DBuildDir=${{ steps.demo_files.outputs.BUILDDIR }}" `
+            "$env:GITHUB_WORKSPACE\installer\Celestial-Rays-Demo.iss"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "ISCC.exe failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+
+      - name: Update demo release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: "Demo"
+          files: installer/output/Celestial-Rays-Demo-v${{ steps.version.outputs.VERSION }}.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
