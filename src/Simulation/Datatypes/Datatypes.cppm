@@ -29,6 +29,7 @@ export struct Sphere
 	glm::vec3 nextPosition{};
 	glm::vec3 velocity{};
 	glm::vec3 angularVelocity{};
+	glm::vec3 prevAcceleration{};
 	std::uint32_t materialIndex{};
 
 	SphereGPUData ToGPUData(float renderScale = 1.0f) const;

@@ -62,14 +62,16 @@ private:
 
 	void InitializeSolarSystem();
 
+	void InitializeAccelerations();
+
 	void SimulationLoop(std::stop_token stopToken);
 	void UpdatePhysics(float timeStep);
 	void PublishSnapshot();
 	size_t FindAvailableSnapshot();
 
 	glm::vec3 CalculateAcceleration(size_t index) const;
-	void UpdateVelocity(size_t index, const glm::vec3& acceleration, float timeStep);
-	void PrepareNewPosition(size_t index, float timeStep);
+	void UpdateVelocity(size_t index, const glm::vec3& prevAcceleration, const glm::vec3& acceleration, float timeStep);
+	void PrepareNewPosition(size_t index, const glm::vec3& acceleration, float timeStep);
 	void ResolveCollisions();
 	void UpdateCurrentPosition(size_t index);
 	void UpdateRotation(size_t index, float timeStep);

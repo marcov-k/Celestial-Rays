@@ -44,7 +44,18 @@ void Simulation::SetPaused(bool paused)
 
 void Simulation::StartSimulation()
 {
+	InitializeAccelerations();
 	_simulationThread = std::jthread([this](std::stop_token stopToken) { SimulationLoop(stopToken); });
+}
+
+void Simulation::InitializeAccelerations()
+{
+	size_t sphereCount{ _spheres.size() };
+	#pragma omp parallel for if (sphereCount > PARALLEL_THRESHOLD)
+	for (std::int64_t i{}; i < sphereCount; ++i)
+	{
+		_spheres[i].prevAcceleration = CalculateAcceleration(i);
+	}
 }
 
 void Simulation::SimulationLoop(std::stop_token stopToken)
@@ -73,7 +84,7 @@ void Simulation::UpdateCamera(float deltaTime, bool fastMove, bool slowMove, con
 	cameraRotation.y += userInput.mouseDeltaX * MOUSE_SENSITIVITY;
 	cameraRotation.x -= userInput.mouseDeltaY * MOUSE_SENSITIVITY;
 
-	const static float halfPi{ std::numbers::pi_v<float> / 2.0f };
+	constexpr float halfPi{ std::numbers::pi_v<float> / 2.0f };
 	cameraRotation.x = std::clamp(cameraRotation.x, -halfPi + EPSILON, halfPi - EPSILON);
 
 	glm::vec3& cameraPosition{ _camera->GetPosition() };
@@ -100,9 +111,7 @@ void Simulation::UpdatePhysics(float timeStep)
 	#pragma omp parallel for if (parallel)
 	for (std::int64_t i{}; i < sphereCount; ++i)
 	{
-		glm::vec3 acceleration{ CalculateAcceleration(i) };
-		UpdateVelocity(i, acceleration, timeStep);
-		PrepareNewPosition(i, timeStep);
+		PrepareNewPosition(i, _spheres[i].prevAcceleration, timeStep);
 	}
 
 	ResolveCollisions();
@@ -112,6 +121,14 @@ void Simulation::UpdatePhysics(float timeStep)
 	{
 		UpdateCurrentPosition(i);
 		UpdateRotation(i, timeStep);
+	}
+
+	#pragma omp parallel for if (parallel)
+	for (std::int64_t i{}; i < sphereCount; ++i)
+	{
+		glm::vec3 acceleration{ CalculateAcceleration(i) };
+		UpdateVelocity(i, _spheres[i].prevAcceleration, acceleration, timeStep);
+		_spheres[i].prevAcceleration = acceleration;
 	}
 }
 
@@ -457,14 +474,15 @@ glm::vec3 Simulation::CalculateAcceleration(size_t index) const
 	return acceleration;
 }
 
-void Simulation::UpdateVelocity(size_t index, const glm::vec3& acceleration, float timeStep)
+void Simulation::UpdateVelocity(size_t index, const glm::vec3& prevAcceleration, const glm::vec3& acceleration, float timeStep)
 {
-	_spheres[index].velocity += acceleration * timeStep;
+	_spheres[index].velocity += 0.5f * (prevAcceleration + acceleration) * timeStep;
 }
 
-void Simulation::PrepareNewPosition(size_t index, float timeStep)
+void Simulation::PrepareNewPosition(size_t index, const glm::vec3& acceleration, float timeStep)
 {
-	_spheres[index].nextPosition = _spheres[index].position + _spheres[index].velocity * timeStep;
+	Sphere& sphere{ _spheres[index] };
+	sphere.nextPosition = sphere.position + sphere.velocity * timeStep + 0.5f * acceleration * timeStep * timeStep;
 }
 
 void Simulation::ResolveCollisions()
