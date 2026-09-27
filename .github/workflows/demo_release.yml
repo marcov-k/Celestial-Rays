@@ -42,6 +42,13 @@ jobs:
           echo "VULKAN_SDK=$SdkPath" >> $env:GITHUB_ENV
           echo "$SdkPath\Bin" >> $env:GITHUB_PATH
 
+      - name: Install vcpkg
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git
+          .\vcpkg\bootstrap-vcpkg.bat
+          vcpkg install
+
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
