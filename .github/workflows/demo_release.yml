@@ -28,6 +28,20 @@ jobs:
         shell: pwsh
         run: choco install innosetup --no-progress -y
 
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          $VulkanVersion = "1.4.357.0"
+          $Installer = "$env:TEMP\VulkanSDK-Installer.exe"
+
+          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/$VulkanVersion/windows/VulkanSDK-$VulkanVersion-Installer.exe" -OutFile $Installer
+
+          Start-Process -FilePath $Installer -ArgumentList "--accept-licenses --default-answer --confirm-command install" -Wait
+
+          $SdkPath = "C:\VulkanSDK\$VulkanVersion"
+          echo "VULKAN_SDK=$SdkPath" >> $env:GITHUB_ENV
+          echo "$SdkPath\Bin" >> $env:GITHUB_ENV
+
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
