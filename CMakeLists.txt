@@ -46,12 +46,18 @@ set(GRADIENT_SHADER_SOURCE
 set(RAYTRACER_SHADER_SOURCE
 	${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/raytracer.comp
 )
+set(TONE_MAPPER_SHADER_SOURCE
+	${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/tone_mapper.comp
+)
 
 set(GRADIENT_SHADER_BINARY
 	${CMAKE_CURRENT_BINARY_DIR}/shaders/gradient.comp.spv
 )
 set(RAYTRACER_SHADER_BINARY
 	${CMAKE_CURRENT_BINARY_DIR}/shaders/raytracer.comp.spv
+)
+set(TONE_MAPPER_SHADER_BINARY
+	${CMAKE_CURRENT_BINARY_DIR}/shaders/tone_mapper.comp.spv
 )
 
 add_custom_command(
@@ -84,10 +90,26 @@ add_custom_command(
 	COMMENT "Compiling GLSL shader: raytracer.comp"
 )
 
+add_custom_command(
+	OUTPUT ${TONE_MAPPER_SHADER_BINARY}
+	COMMAND ${CMAKE_COMMAND} -E make_directory
+		${CMAKE_CURRENT_BINARY_DIR}/shaders
+
+	COMMAND ${GLSLC_EXECUTABLE}
+			--target-env=vulkan1.4
+			-o ${TONE_MAPPER_SHADER_BINARY}
+			${TONE_MAPPER_SHADER_SOURCE}
+
+	DEPENDS ${TONE_MAPPER_SHADER_SOURCE}
+
+	COMMENT "Compiling GLSL shader: tone_mapper.comp"
+)
+
 add_custom_target(Celestial-Rays-Shaders
 	DEPENDS
 		${GRADIENT_SHADER_BINARY}
 		${RAYTRACER_SHADER_BINARY}
+		${TONE_MAPPER_SHADER_BINARY}
 )
 
 add_dependencies(Celestial-Rays

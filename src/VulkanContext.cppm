@@ -25,12 +25,15 @@ public:
 
 	[[nodiscard]]
 	bool BeginFrame();
+	void PrepareRenderImageForRead() const;
 	[[nodiscard]]
 	bool EndFrame();
 
 	const VulkanDevice& GetDevice() const;
 	const VulkanImageView& GetRenderImageView() const;
 	const VkExtent2D& GetRenderImageExtent() const;
+	const VulkanImageView& GetDisplayImageView() const;
+	const VkExtent2D& GetDisplayImageExtent() const;
 	VkCommandBuffer GetCommandBuffer() const;
 
 	std::unique_ptr<VulkanBuffer> CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
@@ -81,8 +84,13 @@ private:
 	std::optional<VulkanDeviceMemory> _renderImageMemory;
 	std::optional<VulkanImage> _renderImage;
 	std::optional<VulkanImageView> _renderImageView;
+	std::optional<VulkanDeviceMemory> _displayImageMemory;
+	std::optional<VulkanImage> _displayImage;
+	std::optional<VulkanImageView> _displayImageView;
 	VkFormat _renderImageFormat{};
 	VkExtent2D _renderImageExtent{};
+	VkFormat _displayImageFormat{};
+	VkExtent2D _displayImageExtent{};
 
 	std::optional<VulkanCommandPool> _commandPool;
 	VkCommandBuffer _commandBuffer{};
@@ -100,6 +108,7 @@ private:
 
 	void CreateSwapchain();
 	void CreateRenderImage();
+	void CreateDisplayImage();
 	void RecreateSwapchain();
 
 	void CreateCommandPool();
@@ -111,12 +120,13 @@ private:
 
 	void BeginCommandBuffer() const;
 	void TransitionRenderImage() const;
+	void TransitionDisplayImage() const;
 
 	bool GetSwapchainImageIndex();
 	
-	void PrepareRenderImageForCopy() const;
+	void PrepareDisplayImageForCopy() const;
 	void PrepareSwapchainImageForCopy() const;
-	void CopyRenderImageToSwapchain() const;
+	void CopyDisplayImageToSwapchain() const;
 	void PrepareSwapchainImageForPresent() const;
 
 	void SubmitCommandBuffer() const;

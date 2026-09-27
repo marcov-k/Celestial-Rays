@@ -69,12 +69,18 @@ export struct alignas(16) EmitterGPUData
 static_assert(sizeof(EmitterGPUData) == 16);
 static_assert(alignof(EmitterGPUData) == 16);
 
-export struct PushConstants
+export struct RaytracerPushConstants
 {
 	std::uint32_t sphereCount{};
 	std::uint32_t emitterCount{};
 	float emitterWeightSum{};
 	std::uint32_t frameIndex{};
+};
+
+export struct ToneMapperPushConstants
+{
+	float exposure;
+	bool correctGamma;
 };
 
 export struct SimulationGPUState

@@ -16,9 +16,11 @@ import Celestial.Window;
 
 int main()
 {
-	const static std::uint32_t WindowWidth{ 1920 };
-	const static std::uint32_t WindowHeight{ 1080 };
-	const static float FieldOfView{ std::numbers::pi_v<float> / 3.0f };
+	constexpr std::uint32_t WindowWidth{ 1920 };
+	constexpr std::uint32_t WindowHeight{ 1080 };
+	constexpr float FieldOfView{ std::numbers::pi_v<float> / 3.0f };
+	constexpr float Exposure{ 0.25f };
+	constexpr bool CorrectGamma{ false };
 
 	try
 	{
@@ -26,7 +28,7 @@ int main()
 		Window window{ instance, WindowWidth, WindowHeight, L"Celestial-Rays" };
 		VulkanContext vulkan{ window };
 		Simulation simulation{ FieldOfView, WindowWidth, WindowHeight };
-		Renderer renderer{ vulkan, simulation.GetMaterialGPUData() };
+		Renderer renderer{ vulkan, simulation.GetMaterialGPUData(), Exposure, CorrectGamma };
 
 		auto previousTime{ std::chrono::steady_clock::now() };
 		std::uint32_t frameIndex{};

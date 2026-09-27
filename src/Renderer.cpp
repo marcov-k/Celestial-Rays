@@ -8,20 +8,21 @@ module;
 
 module Celestial.Rendering;
 
-Renderer::Renderer(VulkanContext& context, const std::vector<MaterialGPUData>& materials)
-	: _context(context), _materialCount(materials.size())
+Renderer::Renderer(VulkanContext& context, const std::vector<MaterialGPUData>& materials, float exposure,
+	bool correctGamma)
+	: _context(context), _materialCount(materials.size()), _exposure(exposure), _correctGamma(correctGamma)
 {
-	CreateShaderModule();
+	CreateShaderModules();
 
 	AllocateBuffers();
 
-	CreateDescriptorSetLayout();
-	CreateDescriptorPool();
-	AllocateDescriptorSet();
+	CreateDescriptorSetLayouts();
+	CreateDescriptorPools();
+	AllocateDescriptorSets();
 	UpdateDescriptorSet();
 
-	CreatePipelineLayout();
-	CreatePipeline();
+	CreatePipelineLayouts();
+	CreatePipelines();
 
 	PushMaterials(materials);
 }
@@ -34,6 +35,8 @@ Renderer::~Renderer()
 void Renderer::Render(const SimulationGPUState& simulationState, const CameraGPUData& cameraData, std::uint32_t frameIndex)
 {
 	if (!_context.BeginFrame()) return;
+
+	// Raytracer
 
 	_cameraBuffer->Write(&cameraData, sizeof(CameraGPUData), 0);
 
@@ -48,10 +51,10 @@ void Renderer::Render(const SimulationGPUState& simulationState, const CameraGPU
 	VkCommandBuffer commandBuffer{ _context.GetCommandBuffer() };
 	const VkExtent2D& renderImageExtent{ _context.GetRenderImageExtent() };
 
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _pipeline->GetPipeline());
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _raytracerPipeline->GetPipeline());
 
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _pipelineLayout->GetPipelineLayout(),
-		0, 1, &_descriptorSet, 0, nullptr);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _raytracerPipelineLayout->GetPipelineLayout(),
+		0, 1, &_raytracerDescriptorSet, 0, nullptr);
 
 	float emitterWeightSum{};
 	for (auto& emitter : simulationState.emitterData)
@@ -59,20 +62,54 @@ void Renderer::Render(const SimulationGPUState& simulationState, const CameraGPU
 		emitterWeightSum += emitter.selectionWeight;
 	}
 
-	PushConstants pushConstants{ sphereCount, emitterCount, emitterWeightSum, frameIndex };
-
-	vkCmdPushConstants(commandBuffer, _pipelineLayout->GetPipelineLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pushConstants);
+	RaytracerPushConstants raytracerPushConstants{ sphereCount, emitterCount, emitterWeightSum, frameIndex };
+	vkCmdPushConstants(commandBuffer, _raytracerPipelineLayout->GetPipelineLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RaytracerPushConstants), &raytracerPushConstants);
 
 	std::uint32_t workGroupsX{ (renderImageExtent.width + 7) / 8 };
 	std::uint32_t workGroupsY{ (renderImageExtent.height + 7) / 8 };
 	vkCmdDispatch(commandBuffer, workGroupsX, workGroupsY, 1);
 
+	// Tone mapper
+
+	_context.PrepareRenderImageForRead();
+
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _toneMapperPipeline->GetPipeline());
+
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _toneMapperPipelineLayout->GetPipelineLayout(),
+		0, 1, &_toneMapperDescriptorSet, 0, nullptr);
+
+	ToneMapperPushConstants toneMapperPushConstants{ _exposure, _correctGamma };
+	vkCmdPushConstants(commandBuffer, _toneMapperPipelineLayout->GetPipelineLayout(), VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ToneMapperPushConstants), &toneMapperPushConstants);
+
+	vkCmdDispatch(commandBuffer, workGroupsX, workGroupsY, 1);
+
 	if (!_context.EndFrame()) UpdateDescriptorSet();
 }
 
-void Renderer::CreateShaderModule()
+float Renderer::GetExposure() const
 {
-	_shaderModule = _context.CreateShaderModule("raytracer");
+	return _exposure;
+}
+
+void Renderer::SetExposure(float exposure)
+{
+	_exposure = exposure;
+}
+
+bool Renderer::GetCorrectGamma() const
+{
+	return _correctGamma;
+}
+
+void Renderer::SetCorrectGamma(bool correctGamma)
+{
+	_correctGamma = correctGamma;
+}
+
+void Renderer::CreateShaderModules()
+{
+	_raytracerShaderModule = _context.CreateShaderModule("raytracer");
+	_toneMapperShaderModule = _context.CreateShaderModule("tone_mapper");
 }
 
 void Renderer::AllocateBuffers()
@@ -111,7 +148,7 @@ void Renderer::GrowSphereBuffer(std::uint64_t sphereCount)
 
 	VkWriteDescriptorSet writeSphereBuffer{
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = _descriptorSet,
+		.dstSet = _raytracerDescriptorSet,
 		.dstBinding = 2,
 		.descriptorCount = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -139,7 +176,7 @@ void Renderer::GrowEmitterBuffer(std::uint64_t emitterCount)
 
 	VkWriteDescriptorSet writeEmitterBuffer{
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = _descriptorSet,
+		.dstSet = _raytracerDescriptorSet,
 		.dstBinding = 3,
 		.descriptorCount = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -149,10 +186,17 @@ void Renderer::GrowEmitterBuffer(std::uint64_t emitterCount)
 	_context.UpdateDescriptorSet(writeEmitterBuffer);
 }
 
-void Renderer::CreateDescriptorSetLayout()
+void Renderer::CreateDescriptorSetLayouts()
 {
 	VkDescriptorSetLayoutBinding renderImageBinding{
 		.binding = 0,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+	};
+
+	VkDescriptorSetLayoutBinding displayImageBinding{
+		.binding = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
@@ -186,60 +230,54 @@ void Renderer::CreateDescriptorSetLayout()
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
 	};
 
-	_descriptorLayout = _context.CreateDescriptorSetLayout({ renderImageBinding, cameraBufferBinding,
+	_raytracerDescriptorLayout = _context.CreateDescriptorSetLayout({ renderImageBinding, cameraBufferBinding,
 		sphereBufferBinding, emitterBufferBinding, materialBufferBinding });
+	_toneMapperDescriptorLayout = _context.CreateDescriptorSetLayout({ renderImageBinding, displayImageBinding });
 }
 
-void Renderer::CreateDescriptorPool()
+void Renderer::CreateDescriptorPools()
 {
-	VkDescriptorPoolSize renderImagePool{
+	VkDescriptorPoolSize storageImagePool{
 		.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-		.descriptorCount = 1
+		.descriptorCount = 3
 	};
 
-	VkDescriptorPoolSize cameraBufferPool{
+	VkDescriptorPoolSize bufferPool{
 		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1
+		.descriptorCount = 4
 	};
 
-	VkDescriptorPoolSize sphereBufferPool{
-		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1
-	};
-
-	VkDescriptorPoolSize emitterBufferPool{
-		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1
-	};
-
-	VkDescriptorPoolSize materialBufferPool{
-		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1
-	};
-
-	_descriptorPool = _context.CreateDescriptorPool({ renderImagePool, cameraBufferPool, sphereBufferPool,
-		emitterBufferPool, materialBufferPool }, 1);
+	_descriptorPool = _context.CreateDescriptorPool({ storageImagePool, bufferPool }, 2);
 }
 
-void Renderer::AllocateDescriptorSet()
+void Renderer::AllocateDescriptorSets()
 {
-	_descriptorSet = _context.AllocateDescriptorSet(*_descriptorPool, *_descriptorLayout);
+	_raytracerDescriptorSet = _context.AllocateDescriptorSet(*_descriptorPool, *_raytracerDescriptorLayout);
+	_toneMapperDescriptorSet = _context.AllocateDescriptorSet(*_descriptorPool, *_toneMapperDescriptorLayout);
 }
 
-void Renderer::CreatePipelineLayout()
+void Renderer::CreatePipelineLayouts()
 {
-	VkPushConstantRange constantRange{
+	VkPushConstantRange raytracerConstantRange{
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.offset = 0,
-		.size = sizeof(PushConstants)
+		.size = sizeof(RaytracerPushConstants)
 	};
 
-	_pipelineLayout = _context.CreatePipelineLayout({ _descriptorLayout->GetDescriptorSetLayout() }, { constantRange });
+	VkPushConstantRange toneMapperConstantRange{
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.offset = 0,
+		.size = sizeof(ToneMapperPushConstants)
+	};
+
+	_raytracerPipelineLayout = _context.CreatePipelineLayout({ _raytracerDescriptorLayout->GetDescriptorSetLayout() }, { raytracerConstantRange });
+	_toneMapperPipelineLayout = _context.CreatePipelineLayout({ _toneMapperDescriptorLayout->GetDescriptorSetLayout() }, { toneMapperConstantRange });
 }
 
-void Renderer::CreatePipeline()
+void Renderer::CreatePipelines()
 {
-	_pipeline = _context.CreateComputePipeline(*_shaderModule, *_pipelineLayout);
+	_raytracerPipeline = _context.CreateComputePipeline(*_raytracerShaderModule, *_raytracerPipelineLayout);
+	_toneMapperPipeline = _context.CreateComputePipeline(*_toneMapperShaderModule, *_toneMapperPipelineLayout);
 }
 
 void Renderer::PushMaterials(const std::vector<MaterialGPUData>& materials) const
@@ -256,11 +294,34 @@ void Renderer::UpdateDescriptorSet() const
 
 	VkWriteDescriptorSet writeRenderImage{
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = _descriptorSet,
+		.dstSet = _raytracerDescriptorSet,
 		.dstBinding = 0,
 		.descriptorCount = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 		.pImageInfo = &renderImageInfo
+	};
+
+	VkWriteDescriptorSet writeToneMapperRenderImage{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = _toneMapperDescriptorSet,
+		.dstBinding = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+		.pImageInfo = &renderImageInfo
+	};
+
+	VkDescriptorImageInfo displayImageInfo{
+		.imageView = _context.GetDisplayImageView().GetImageView(),
+		.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+	};
+
+	VkWriteDescriptorSet writeDisplayImage{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = _toneMapperDescriptorSet,
+		.dstBinding = 1,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+		.pImageInfo = &displayImageInfo
 	};
 
 	VkDescriptorBufferInfo cameraBufferInfo{
@@ -271,7 +332,7 @@ void Renderer::UpdateDescriptorSet() const
 
 	VkWriteDescriptorSet writeCameraBuffer{
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = _descriptorSet,
+		.dstSet = _raytracerDescriptorSet,
 		.dstBinding = 1,
 		.descriptorCount = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -286,7 +347,7 @@ void Renderer::UpdateDescriptorSet() const
 
 	VkWriteDescriptorSet writeSphereBuffer{
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = _descriptorSet,
+		.dstSet = _raytracerDescriptorSet,
 		.dstBinding = 2,
 		.descriptorCount = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -301,7 +362,7 @@ void Renderer::UpdateDescriptorSet() const
 
 	VkWriteDescriptorSet writeEmitterBuffer{
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = _descriptorSet,
+		.dstSet = _raytracerDescriptorSet,
 		.dstBinding = 3,
 		.descriptorCount = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -316,13 +377,13 @@ void Renderer::UpdateDescriptorSet() const
 
 	VkWriteDescriptorSet writeMaterialBuffer{
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = _descriptorSet,
+		.dstSet = _raytracerDescriptorSet,
 		.dstBinding = 4,
 		.descriptorCount = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.pBufferInfo = &materialBufferInfo
 	};
 
-	_context.UpdateDescriptorSets({ writeRenderImage, writeCameraBuffer, writeSphereBuffer,
-		writeEmitterBuffer, writeMaterialBuffer });
+	_context.UpdateDescriptorSets({ writeRenderImage, writeToneMapperRenderImage, writeDisplayImage,
+		writeCameraBuffer, writeSphereBuffer, writeEmitterBuffer, writeMaterialBuffer });
 }

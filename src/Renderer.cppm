@@ -17,15 +17,23 @@ import Celestial.Vulkan.Wrappers;
 export class Renderer
 {
 public:
-	explicit Renderer(VulkanContext& vulkanContext, const std::vector<MaterialGPUData>& materials);
+	explicit Renderer(VulkanContext& vulkanContext, const std::vector<MaterialGPUData>& materials, float exposure = 0.0f,
+		bool correctGamma = false);
 	~Renderer();
 
 	void Render(const SimulationGPUState& simulationState, const CameraGPUData& cameraData, std::uint32_t frameIndex);
 
+	float GetExposure() const;
+	void SetExposure(float exposure);
+
+	bool GetCorrectGamma() const;
+	void SetCorrectGamma(bool correctGamma);
+
 private:
 	VulkanContext& _context;
 
-	std::unique_ptr<VulkanShaderModule> _shaderModule;
+	std::unique_ptr<VulkanShaderModule> _raytracerShaderModule;
+	std::unique_ptr<VulkanShaderModule> _toneMapperShaderModule;
 
 	std::unique_ptr<VulkanBuffer> _cameraBuffer;
 	std::unique_ptr<VulkanBuffer> _sphereBuffer;
@@ -35,25 +43,32 @@ private:
 	std::unique_ptr<VulkanBuffer> _materialBuffer;
 	std::uint64_t _materialCount{};
 
-	std::unique_ptr<VulkanDescriptorSetLayout> _descriptorLayout;
+	std::unique_ptr<VulkanDescriptorSetLayout> _raytracerDescriptorLayout;
+	std::unique_ptr<VulkanDescriptorSetLayout> _toneMapperDescriptorLayout;
 	std::unique_ptr<VulkanDescriptorPool> _descriptorPool;
-	VkDescriptorSet _descriptorSet{};
+	VkDescriptorSet _raytracerDescriptorSet{};
+	VkDescriptorSet _toneMapperDescriptorSet{};
 
-	std::unique_ptr<VulkanPipelineLayout> _pipelineLayout;
-	std::unique_ptr<VulkanComputePipeline> _pipeline;
+	std::unique_ptr<VulkanPipelineLayout> _raytracerPipelineLayout;
+	std::unique_ptr<VulkanPipelineLayout> _toneMapperPipelineLayout;
+	std::unique_ptr<VulkanComputePipeline> _raytracerPipeline;
+	std::unique_ptr<VulkanComputePipeline> _toneMapperPipeline;
 
-	void CreateShaderModule();
+	float _exposure{};
+	bool _correctGamma{};
+
+	void CreateShaderModules();
 
 	void AllocateBuffers();
 	void GrowSphereBuffer(std::uint64_t sphereCount);
 	void GrowEmitterBuffer(std::uint64_t emitterCount);
 
-	void CreateDescriptorSetLayout();
-	void CreateDescriptorPool();
-	void AllocateDescriptorSet();
+	void CreateDescriptorSetLayouts();
+	void CreateDescriptorPools();
+	void AllocateDescriptorSets();
 
-	void CreatePipelineLayout();
-	void CreatePipeline();
+	void CreatePipelineLayouts();
+	void CreatePipelines();
 
 	void PushMaterials(const std::vector<MaterialGPUData>& materials) const;
 

@@ -394,6 +394,7 @@ VulkanContext::VulkanContext(const Window& window) : _window(window)
 
 	CreateSwapchain();
 	CreateRenderImage();
+	CreateDisplayImage();
 
 	CreateCommandPool();
 	AllocateCommandBuffer();
@@ -428,15 +429,16 @@ bool VulkanContext::BeginFrame()
 
 	BeginCommandBuffer();
 	TransitionRenderImage();
+	TransitionDisplayImage();
 	
 	return true;
 }
 
 bool VulkanContext::EndFrame()
 {
-	PrepareRenderImageForCopy();
+	PrepareDisplayImageForCopy();
 	PrepareSwapchainImageForCopy();
-	CopyRenderImageToSwapchain();
+	CopyDisplayImageToSwapchain();
 	PrepareSwapchainImageForPresent();
 
 	VkResult result{ vkEndCommandBuffer(_commandBuffer) };
@@ -465,6 +467,16 @@ const VulkanImageView& VulkanContext::GetRenderImageView() const
 const VkExtent2D& VulkanContext::GetRenderImageExtent() const
 {
 	return _renderImageExtent;
+}
+
+const VulkanImageView& VulkanContext::GetDisplayImageView() const
+{
+	return _displayImageView.value();
+}
+
+const VkExtent2D& VulkanContext::GetDisplayImageExtent() const
+{
+	return _displayImageExtent;
 }
 
 VkCommandBuffer VulkanContext::GetCommandBuffer() const
@@ -771,11 +783,10 @@ void VulkanContext::CreateSwapchain()
 void VulkanContext::CreateRenderImage()
 {
 	constexpr VkImageUsageFlags RenderImageUsage{
-		VK_IMAGE_USAGE_STORAGE_BIT |
-		VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+		VK_IMAGE_USAGE_STORAGE_BIT
 	};
 
-	_renderImageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+	_renderImageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
 	_renderImageExtent = _swapchainExtent;
 
 	VkDevice device{ _device->GetDevice() };
@@ -843,6 +854,81 @@ void VulkanContext::CreateRenderImage()
 	_renderImageView.emplace(device, &viewInfo);
 }
 
+void VulkanContext::CreateDisplayImage()
+{
+	constexpr VkImageUsageFlags DisplayImageUsage{
+		VK_IMAGE_USAGE_STORAGE_BIT |
+		VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+	};
+
+	_displayImageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+	_displayImageExtent = _swapchainExtent;
+
+	VkDevice device{ _device->GetDevice() };
+
+	if (!CheckImageFormatSupport(_physicalDevice, _displayImageFormat, DisplayImageUsage))
+	{
+		throw std::runtime_error("Display image format does not support required usage");
+	}
+
+	VkImageCreateInfo imageInfo{
+		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+		.imageType = VK_IMAGE_TYPE_2D,
+		.format = _displayImageFormat,
+		.extent = {
+			.width = _displayImageExtent.width,
+			.height = _displayImageExtent.height,
+			.depth = 1
+		},
+		.mipLevels = 1,
+		.arrayLayers = 1,
+		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.tiling = VK_IMAGE_TILING_OPTIMAL,
+		.usage = DisplayImageUsage,
+		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+	};
+
+	_displayImage.emplace(device, &imageInfo);
+
+	VkImage displayImage{ _displayImage->GetImage() };
+
+	VkMemoryRequirements memoryRequirements{};
+	vkGetImageMemoryRequirements(device, displayImage, &memoryRequirements);
+
+	VkMemoryAllocateInfo allocateInfo{
+		.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		.allocationSize = memoryRequirements.size,
+		.memoryTypeIndex = FindMemoryType(
+			_physicalDevice,
+			memoryRequirements.memoryTypeBits,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+		)
+	};
+
+	_displayImageMemory.emplace(device, &allocateInfo);
+
+	VkResult result{ vkBindImageMemory(device, displayImage, _displayImageMemory->GetMemory(), 0) };
+
+	if (result != VK_SUCCESS) throw std::runtime_error("Failed to bind display image memory");
+
+	VkImageViewCreateInfo viewInfo{
+		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+		.image = displayImage,
+		.viewType = VK_IMAGE_VIEW_TYPE_2D,
+		.format = _displayImageFormat,
+		.subresourceRange = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1
+		}
+	};
+
+	_displayImageView.emplace(device, &viewInfo);
+}
+
 void VulkanContext::RecreateSwapchain()
 {
 	if (_window.Width() == 0 || _window.Height() == 0) return;
@@ -850,6 +936,9 @@ void VulkanContext::RecreateSwapchain()
 	VkDevice device{ _device->GetDevice() };
 	vkDeviceWaitIdle(device);
 
+	_displayImageView.reset();
+	_displayImage.reset();
+	_displayImageMemory.reset();
 	_renderImageView.reset();
 	_renderImage.reset();
 	_renderImageMemory.reset();
@@ -857,6 +946,7 @@ void VulkanContext::RecreateSwapchain()
 
 	CreateSwapchain();
 	CreateRenderImage();
+	CreateDisplayImage();
 
 	if (_renderFinishedSemaphores.size() != _swapchainImages.size())
 	{
@@ -959,6 +1049,29 @@ void VulkanContext::TransitionRenderImage() const
 	vkCmdPipelineBarrier2(_commandBuffer, &dependencyInfo);
 }
 
+void VulkanContext::TransitionDisplayImage() const
+{
+	VkImageMemoryBarrier2 memoryBarrier{
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+		.srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+		.srcAccessMask = VK_ACCESS_2_NONE,
+		.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+		.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+		.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+		.image = _displayImage->GetImage(),
+		.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+	};
+
+	VkDependencyInfo dependencyInfo{
+		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &memoryBarrier
+	};
+
+	vkCmdPipelineBarrier2(_commandBuffer, &dependencyInfo);
+}
+
 bool VulkanContext::GetSwapchainImageIndex()
 {
 	VkResult result{ vkAcquireNextImageKHR(_device->GetDevice(), _swapchain->GetSwapchain(), UINT64_MAX,
@@ -978,7 +1091,30 @@ bool VulkanContext::GetSwapchainImageIndex()
 	return true;
 }
 
-void VulkanContext::PrepareRenderImageForCopy() const
+void VulkanContext::PrepareRenderImageForRead() const
+{
+	VkImageMemoryBarrier2 memoryBarrier{
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+		.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+		.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+		.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+		.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+		.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+		.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+		.image = _renderImage->GetImage(),
+		.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
+	};
+
+	VkDependencyInfo dependencyInfo{
+		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &memoryBarrier
+	};
+
+	vkCmdPipelineBarrier2(_commandBuffer, &dependencyInfo);
+}
+
+void VulkanContext::PrepareDisplayImageForCopy() const
 {
 	VkImageMemoryBarrier2 memoryBarrier{
 		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -988,7 +1124,7 @@ void VulkanContext::PrepareRenderImageForCopy() const
 		.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
 		.oldLayout = VK_IMAGE_LAYOUT_GENERAL,
 		.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-		.image = _renderImage->GetImage(),
+		.image = _displayImage->GetImage(),
 		.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 }
 	};
 
@@ -1024,20 +1160,20 @@ void VulkanContext::PrepareSwapchainImageForCopy() const
 	vkCmdPipelineBarrier2(_commandBuffer, &dependencyInfo);
 }
 
-void VulkanContext::CopyRenderImageToSwapchain() const
+void VulkanContext::CopyDisplayImageToSwapchain() const
 {
 	VkImageBlit region{
 		.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
 		.srcOffsets = { { 0, 0, 0 }, {
-			static_cast<std::int32_t>(_renderImageExtent.width),
-			static_cast<std::int32_t>(_renderImageExtent.height), 1 } },
+			static_cast<std::int32_t>(_displayImageExtent.width),
+			static_cast<std::int32_t>(_displayImageExtent.height), 1 } },
 		.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
 		.dstOffsets = { { 0, 0, 0 }, {
 			static_cast<std::int32_t>(_swapchainExtent.width),
 			static_cast<std::int32_t>(_swapchainExtent.height), 1 } }
 	};
 
-	vkCmdBlitImage(_commandBuffer, _renderImage->GetImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+	vkCmdBlitImage(_commandBuffer, _displayImage->GetImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 		_swapchainImages[_swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region,
 		VK_FILTER_NEAREST);
 }
