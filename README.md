@@ -2,7 +2,7 @@
 Experimental real-time celestial body simulation and renderer built with Vulkan in C++ using a custom GLSL ray-tracer.
 
 ## Demo
-Features miniature version of our own solar system.
+Features a miniature version of our own solar system.
 
 ### Installation:
 1. Download the Celestial-Rays-Demo.exe installer from the Demo release.
