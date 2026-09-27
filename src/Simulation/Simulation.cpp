@@ -111,7 +111,7 @@ void Simulation::UpdatePhysics(float timeStep)
 	#pragma omp parallel for if (parallel)
 	for (std::int64_t i{}; i < sphereCount; ++i)
 	{
-		PrepareNewPosition(i, _spheres[i].prevAcceleration, timeStep);
+		PrepareNewPosition(i, timeStep);
 	}
 
 	ResolveCollisions();
@@ -127,7 +127,7 @@ void Simulation::UpdatePhysics(float timeStep)
 	for (std::int64_t i{}; i < sphereCount; ++i)
 	{
 		glm::vec3 acceleration{ CalculateAcceleration(i) };
-		UpdateVelocity(i, _spheres[i].prevAcceleration, acceleration, timeStep);
+		UpdateVelocity(i, acceleration, timeStep);
 		_spheres[i].prevAcceleration = acceleration;
 	}
 }
@@ -474,15 +474,16 @@ glm::vec3 Simulation::CalculateAcceleration(size_t index) const
 	return acceleration;
 }
 
-void Simulation::UpdateVelocity(size_t index, const glm::vec3& prevAcceleration, const glm::vec3& acceleration, float timeStep)
-{
-	_spheres[index].velocity += 0.5f * (prevAcceleration + acceleration) * timeStep;
-}
-
-void Simulation::PrepareNewPosition(size_t index, const glm::vec3& acceleration, float timeStep)
+void Simulation::UpdateVelocity(size_t index, const glm::vec3& acceleration, float timeStep)
 {
 	Sphere& sphere{ _spheres[index] };
-	sphere.nextPosition = sphere.position + sphere.velocity * timeStep + 0.5f * acceleration * timeStep * timeStep;
+	sphere.velocity += 0.5f * (sphere.prevAcceleration + acceleration) * timeStep;
+}
+
+void Simulation::PrepareNewPosition(size_t index, float timeStep)
+{
+	Sphere& sphere{ _spheres[index] };
+	sphere.nextPosition = sphere.position + sphere.velocity * timeStep + 0.5f * sphere.prevAcceleration * timeStep * timeStep;
 }
 
 void Simulation::ResolveCollisions()
