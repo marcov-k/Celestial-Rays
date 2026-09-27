@@ -100,6 +100,6 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: "Demo"
-          files: installer/output/Celestial-Rays-Demo-v${{ steps.version.outputs.VERSION }}.exe
+          files: installer/output/Celestial-Rays-Demo.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
