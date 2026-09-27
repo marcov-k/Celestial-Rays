@@ -53,7 +53,7 @@ jobs:
         run: choco install ninja --no-progress -y
 
       - name: Setup MSVC dev environment
-        uses: ilammy/msvc-dev-cmd@c1
+        uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
