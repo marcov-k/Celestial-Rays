@@ -59,7 +59,7 @@ jobs:
         id: demo_files
         shell: pwsh
         run: |
-          $BuildDir = (Get-ChildItem "out" -Recurse -Directory -Filter x64-release |
+          $BuildDir = (Get-ChildItem "build" -Recurse -Directory -Filter Release |
             Select-Object -First 1).FullName
 
           if (-not $BuildDir) {
