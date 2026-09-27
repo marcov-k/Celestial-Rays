@@ -34,9 +34,9 @@ jobs:
           $VulkanVersion = "1.4.357.0"
           $Installer = "$env:TEMP\VulkanSDK-Installer.exe"
 
-          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/$VulkanVersion/windows/VulkanSDK-$VulkanVersion-Installer.exe" -OutFile $Installer
+          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/$VulkanVersion/windows/vulkansdk-windows-X64-$VulkanVersion.exe" -OutFile $Installer
 
-          Start-Process -FilePath $Installer -ArgumentList "--accept-licenses --default-answer --confirm-command install" -Wait
+          Start-Process -FilePath $Installer -ArgumentList "install --accept-licenses --default-answer --confirm-command" -Wait
 
           $SdkPath = "C:\VulkanSDK\$VulkanVersion"
           echo "VULKAN_SDK=$SdkPath" >> $env:GITHUB_ENV
