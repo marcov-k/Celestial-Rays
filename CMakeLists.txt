@@ -23,7 +23,6 @@ target_sources(Celestial-Rays
 
 target_compile_definitions(Celestial-Rays PRIVATE
 	VK_USE_PLATFORM_WIN32_KHR
-	CELESTIAL_SHADER_DIR="${CMAKE_CURRENT_BINARY_DIR}/shaders"
 )
 
 find_package(Vulkan REQUIRED)

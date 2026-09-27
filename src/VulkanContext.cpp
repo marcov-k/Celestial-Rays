@@ -5,6 +5,7 @@ module;
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <format>
 #include <fstream>
 #include <optional>
@@ -316,9 +317,23 @@ namespace
 		throw std::runtime_error("Failed to find suitable Vulkan memory type");
 	}
 
+	std::filesystem::path GetShaderDirectory()
+	{
+		wchar_t path[MAX_PATH];
+
+		DWORD length{ GetModuleFileNameW(NULL, path, MAX_PATH) };
+
+		if (length <= 0 || length >= MAX_PATH)
+		{
+			throw std::runtime_error("Failed to find module filename");
+		}
+
+		return std::filesystem::path{ path }.parent_path() / "shaders";
+	}
+
 	std::vector<std::uint32_t> GetShaderBinary(const std::string_view shaderName)
 	{
-		std::string path{ std::format("{}/{}.comp.spv", CELESTIAL_SHADER_DIR, shaderName) };
+		std::filesystem::path path{ GetShaderDirectory() / std::format("{}.comp.spv", shaderName) };
 
 		std::ifstream file{ path, std::ios::binary | std::ios::ate };
 		if (!file) throw std::runtime_error("Failed to open shader binary file");
