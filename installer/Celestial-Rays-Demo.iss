@@ -12,7 +12,7 @@ DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 
 OutputDir=output
-OutputBaseFilename=Celestial-Rays-Demo-v{#AppVersion}
+OutputBaseFilename=Celestial-Rays-Demo
 
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
