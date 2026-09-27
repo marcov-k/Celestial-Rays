@@ -78,7 +78,6 @@ jobs:
           }
 
           Move-Item -Path "$BuildDir\Celestial-Rays.exe" -Destination "$BuildDir\Celestial-Rays-Demo.exe"
-          Remove-Item -Path "$BuildDir\Celestial-Rays.exe"
 
           echo "BUILDDIR=$BuildDir" >> $env:GITHUB_OUTPUT
 
