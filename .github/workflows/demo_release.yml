@@ -40,7 +40,7 @@ jobs:
 
           $SdkPath = "C:\VulkanSDK\$VulkanVersion"
           echo "VULKAN_SDK=$SdkPath" >> $env:GITHUB_ENV
-          echo "$SdkPath\Bin" >> $env:GITHUB_ENV
+          echo "$SdkPath\Bin" >> $env:GITHUB_PATH
 
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
