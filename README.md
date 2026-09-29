@@ -10,7 +10,8 @@ Features a miniature version of our own solar system.
 
 ### Controls:
 - WASD + EQ -> forward/left/backward/right + up/down camera movement
-- Mouse -> Rotate camera
+- Mouse Move -> rotate camera
+- Move Scroll -> increase/decrease physics timestep (speed up/slow down simulation)
 - Space -> pause/unpause the simulation
 - Left Shift (hold) -> increase camera movement speed
 - Left Control (hold) -> decrease camera movement speed
