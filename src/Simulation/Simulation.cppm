@@ -32,8 +32,7 @@ public:
 	CameraGPUData GetCameraGPUData() const;
 	std::vector<MaterialGPUData> GetMaterialGPUData() const;
 
-	void IncreaseSimulationSpeed(MoveSpeed moveSpeed);
-	void DecreaseSimulationSpeed(MoveSpeed moveSpeed);
+	void UpdateSimulationSpeed(MouseScroll scroll, MoveSpeed moveSpeed);
 	float GetPhysicsTimestep() const;
 
 private:

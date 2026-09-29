@@ -48,8 +48,10 @@ void Simulation::StartSimulation()
 	_simulationThread = std::jthread([this](std::stop_token stopToken) { SimulationLoop(stopToken); });
 }
 
-void Simulation::IncreaseSimulationSpeed(MoveSpeed moveSpeed)
+void Simulation::UpdateSimulationSpeed(MouseScroll scroll, MoveSpeed moveSpeed)
 {
+	if (scroll == MouseScroll::None) return;
+
 	float update{ PHYSICS_TIMESTEP_CHANGE };
 	switch (moveSpeed)
 	{
@@ -63,25 +65,16 @@ void Simulation::IncreaseSimulationSpeed(MoveSpeed moveSpeed)
 	}
 
 	std::lock_guard lock{ _timestepMutex };
-	_physicsTimestep += update;
-}
-
-void Simulation::DecreaseSimulationSpeed(MoveSpeed moveSpeed)
-{
-	float update{ PHYSICS_TIMESTEP_CHANGE };
-	switch (moveSpeed)
+	switch (scroll)
 	{
-	case MoveSpeed::Fast:
-		update *= PHYSICS_TIMESTEP_FAST_FACTOR;
+	case MouseScroll::Up:
+		_physicsTimestep += update;
 		break;
 
-	case MoveSpeed::Slow:
-		update *= PHYSICS_TIMESTEP_SLOW_FACTOR;
+	case MouseScroll::Down:
+		_physicsTimestep = std::max(_physicsTimestep - update, MIN_PHYSICS_TIMESTEP);
 		break;
 	}
-
-	std::lock_guard lock{ _timestepMutex };
-	_physicsTimestep = std::max(_physicsTimestep - update, MIN_PHYSICS_TIMESTEP);
 }
 
 float Simulation::GetPhysicsTimestep() const

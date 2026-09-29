@@ -25,7 +25,7 @@ int main()
 
 	try
 	{
-		HINSTANCE instance = GetModuleHandleW(nullptr);
+		HINSTANCE instance{ GetModuleHandleW(nullptr) };
 		Window window{ instance, WindowWidth, WindowHeight, L"Celestial-Rays" };
 		VulkanContext vulkan{ window };
 		Simulation simulation{ FieldOfView, WindowWidth, WindowHeight };
@@ -49,9 +49,10 @@ int main()
 			if (!window.Focused() || window.Width() == 0 || window.Height() == 0) continue;
 
 			MoveSpeed moveSpeed{ window.GetMoveSpeed() };
+			MouseScroll scroll{ window.GetScroll() };
+
 			simulation.SetPaused(window.Paused());
-			if (window.ScrollUp()) simulation.IncreaseSimulationSpeed(moveSpeed);
-			else if (window.ScrollDown()) simulation.DecreaseSimulationSpeed(moveSpeed);
+			simulation.UpdateSimulationSpeed(scroll, moveSpeed);
 			simulation.UpdateCamera(deltaTime, moveSpeed, simulationInput);
 
 			renderer.Render(simulation.GetGPUState(), simulation.GetCameraGPUData(), frameIndex);

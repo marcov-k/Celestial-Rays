@@ -4,11 +4,18 @@ module;
 
 export module Celestial.Simulation.Input;
 
-export enum MoveSpeed
+export enum class MoveSpeed
 {
 	Base,
 	Fast,
 	Slow
+};
+
+export enum class MouseScroll
+{
+	None,
+	Up,
+	Down
 };
 
 export struct SimulationInput

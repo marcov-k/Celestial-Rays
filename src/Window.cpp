@@ -207,24 +207,11 @@ MoveSpeed Window::GetMoveSpeed() const noexcept
 	return MoveSpeed::Base;
 }
 
-bool Window::ScrollUp() noexcept
+MouseScroll Window::GetScroll() noexcept
 {
-	if (_scroll == MouseScroll::Up)
-	{
-		_scroll = MouseScroll::None;
-		return true;
-	}
-	return false;
-}
-
-bool Window::ScrollDown() noexcept
-{
-	if (_scroll == MouseScroll::Down)
-	{
-		_scroll = MouseScroll::None;
-		return true;
-	}
-	return false;
+	MouseScroll scroll{ _scroll };
+	_scroll = MouseScroll::None;
+	return scroll;
 }
 
 std::uint32_t Window::Width() const noexcept

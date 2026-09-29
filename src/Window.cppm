@@ -11,13 +11,6 @@ export module Celestial.Window;
 
 import Celestial.Simulation.Input;
 
-enum class MouseScroll
-{
-	None,
-	Up,
-	Down
-};
-
 export class Window
 {
 public:
@@ -37,8 +30,7 @@ public:
 	bool Focused() const noexcept;
 	bool Paused() const noexcept;
 	MoveSpeed GetMoveSpeed() const noexcept;
-	bool ScrollUp() noexcept;
-	bool ScrollDown() noexcept;
+	MouseScroll GetScroll() noexcept;
 
 	std::uint32_t Width() const noexcept;
 	std::uint32_t Height() const noexcept;
