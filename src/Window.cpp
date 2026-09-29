@@ -125,6 +125,10 @@ LRESULT CALLBACK Window::WindowProc(HWND hwnd, UINT message, WPARAM wParam, LPAR
 		case WM_MOUSEMOVE:
 			window->HandleMouseMove(lParam);
 			return 0;
+
+		case WM_MOUSEWHEEL:
+			window->HandleMouseScroll(wParam);
+			return 0;
 		}
 	}
 
@@ -195,14 +199,32 @@ bool Window::Paused() const noexcept
 	return _paused;
 }
 
-bool Window::FastMovement() const noexcept
+MoveSpeed Window::GetMoveSpeed() const noexcept
 {
-	return _keys[VK_SHIFT];
+	if (_keys[VK_SHIFT] && _keys[VK_CONTROL]) return MoveSpeed::Base;
+	if (_keys[VK_SHIFT]) return MoveSpeed::Fast;
+	if (_keys[VK_CONTROL]) return MoveSpeed::Slow;
+	return MoveSpeed::Base;
 }
 
-bool Window::SlowMovement() const noexcept
+bool Window::ScrollUp() noexcept
 {
-	return _keys[VK_CONTROL];
+	if (_scroll == MouseScroll::Up)
+	{
+		_scroll = MouseScroll::None;
+		return true;
+	}
+	return false;
+}
+
+bool Window::ScrollDown() noexcept
+{
+	if (_scroll == MouseScroll::Down)
+	{
+		_scroll = MouseScroll::None;
+		return true;
+	}
+	return false;
 }
 
 std::uint32_t Window::Width() const noexcept
@@ -319,4 +341,12 @@ void Window::HandleToggles(WPARAM keyIndex)
 		_paused = !_paused;
 		break;
 	}
+}
+
+void Window::HandleMouseScroll(WPARAM wParam)
+{
+	int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+	
+	if (delta > 0) _scroll = MouseScroll::Up;
+	else if (delta < 0) _scroll = MouseScroll::Down;
 }

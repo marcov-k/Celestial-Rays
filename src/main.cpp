@@ -10,6 +10,7 @@
 #include <stdexcept>
 
 import Celestial.Simulation;
+import Celestial.Simulation.Input;
 import Celestial.Rendering;
 import Celestial.Vulkan;
 import Celestial.Window;
@@ -47,9 +48,11 @@ int main()
 
 			if (!window.Focused() || window.Width() == 0 || window.Height() == 0) continue;
 
+			MoveSpeed moveSpeed{ window.GetMoveSpeed() };
 			simulation.SetPaused(window.Paused());
-
-			simulation.UpdateCamera(deltaTime, window.FastMovement(), window.SlowMovement(), simulationInput);
+			if (window.ScrollUp()) simulation.IncreaseSimulationSpeed(moveSpeed);
+			else if (window.ScrollDown()) simulation.DecreaseSimulationSpeed(moveSpeed);
+			simulation.UpdateCamera(deltaTime, moveSpeed, simulationInput);
 
 			renderer.Render(simulation.GetGPUState(), simulation.GetCameraGPUData(), frameIndex);
 

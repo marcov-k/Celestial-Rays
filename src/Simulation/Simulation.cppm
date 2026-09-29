@@ -26,16 +26,24 @@ public:
 
 	void SetPaused(bool paused);
 
-	void UpdateCamera(float deltaTime, bool fastMove, bool slowMove, const SimulationInput& userInput);
+	void UpdateCamera(float deltaTime, MoveSpeed moveSpeed, const SimulationInput& userInput);
 
 	SimulationGPUState GetGPUState() const;
 	CameraGPUData GetCameraGPUData() const;
 	std::vector<MaterialGPUData> GetMaterialGPUData() const;
 
+	void IncreaseSimulationSpeed(MoveSpeed moveSpeed);
+	void DecreaseSimulationSpeed(MoveSpeed moveSpeed);
+	float GetPhysicsTimestep() const;
+
 private:
 	static const glm::vec3 WORLD_UP;
 	static constexpr float PHYSICS_UPDATES_PER_SECOND{ 120.0f };
-	static constexpr float PHYSICS_TIME_STEP{ 1.0f / PHYSICS_UPDATES_PER_SECOND };
+	static constexpr float BASE_PHYSICS_TIMESTEP{ 1.0f / PHYSICS_UPDATES_PER_SECOND };
+	static constexpr float PHYSICS_TIMESTEP_CHANGE{ BASE_PHYSICS_TIMESTEP * 5e-3f };
+	static constexpr float MIN_PHYSICS_TIMESTEP{ BASE_PHYSICS_TIMESTEP * 1e-4f };
+	static constexpr float PHYSICS_TIMESTEP_FAST_FACTOR{ 5.0f };
+	static constexpr float PHYSICS_TIMESTEP_SLOW_FACTOR{ 0.1f };
 	static constexpr float GRAVITY_CONSTANT{ 990.723f };
 	static constexpr float MOUSE_SENSITIVITY{ 0.005f };
 	static constexpr float CAMERA_MOVE_SPEED{ 30.0f };
@@ -57,6 +65,9 @@ private:
 	mutable Snapshot _snapshots[3];
 	mutable std::mutex _snapshotStateMutex;
 	size_t _publishedSnapshot{};
+
+	float _physicsTimestep{ BASE_PHYSICS_TIMESTEP };
+	std::mutex _timestepMutex{};
 
 	void InitializeSnapshots();
 

@@ -11,6 +11,13 @@ export module Celestial.Window;
 
 import Celestial.Simulation.Input;
 
+enum class MouseScroll
+{
+	None,
+	Up,
+	Down
+};
+
 export class Window
 {
 public:
@@ -29,8 +36,9 @@ public:
 	void ClearResizedFlag() noexcept;
 	bool Focused() const noexcept;
 	bool Paused() const noexcept;
-	bool FastMovement() const noexcept;
-	bool SlowMovement() const noexcept;
+	MoveSpeed GetMoveSpeed() const noexcept;
+	bool ScrollUp() noexcept;
+	bool ScrollDown() noexcept;
 
 	std::uint32_t Width() const noexcept;
 	std::uint32_t Height() const noexcept;
@@ -61,6 +69,7 @@ private:
 	int _mouseY{};
 	int _mouseDeltaX{};
 	int _mouseDeltaY{};
+	MouseScroll _scroll{ MouseScroll::None };
 	std::array<bool, 256> _keys{};
 
 	void LoseFocus();
@@ -71,4 +80,5 @@ private:
 	void DisableCameraMode();
 	void HandleMouseMove(LPARAM lParam);
 	void HandleToggles(WPARAM keyIndex);
+	void HandleMouseScroll(WPARAM wParam);
 };

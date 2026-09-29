@@ -48,6 +48,47 @@ void Simulation::StartSimulation()
 	_simulationThread = std::jthread([this](std::stop_token stopToken) { SimulationLoop(stopToken); });
 }
 
+void Simulation::IncreaseSimulationSpeed(MoveSpeed moveSpeed)
+{
+	float update{ PHYSICS_TIMESTEP_CHANGE };
+	switch (moveSpeed)
+	{
+	case MoveSpeed::Fast:
+		update *= PHYSICS_TIMESTEP_FAST_FACTOR;
+		break;
+
+	case MoveSpeed::Slow:
+		update *= PHYSICS_TIMESTEP_SLOW_FACTOR;
+		break;
+	}
+
+	std::lock_guard lock{ _timestepMutex };
+	_physicsTimestep += update;
+}
+
+void Simulation::DecreaseSimulationSpeed(MoveSpeed moveSpeed)
+{
+	float update{ PHYSICS_TIMESTEP_CHANGE };
+	switch (moveSpeed)
+	{
+	case MoveSpeed::Fast:
+		update *= PHYSICS_TIMESTEP_FAST_FACTOR;
+		break;
+
+	case MoveSpeed::Slow:
+		update *= PHYSICS_TIMESTEP_SLOW_FACTOR;
+		break;
+	}
+
+	std::lock_guard lock{ _timestepMutex };
+	_physicsTimestep = std::max(_physicsTimestep - update, MIN_PHYSICS_TIMESTEP);
+}
+
+float Simulation::GetPhysicsTimestep() const
+{
+	return _physicsTimestep;
+}
+
 void Simulation::InitializeAccelerations()
 {
 	size_t sphereCount{ _spheres.size() };
@@ -60,7 +101,7 @@ void Simulation::InitializeAccelerations()
 
 void Simulation::SimulationLoop(std::stop_token stopToken)
 {
-	const auto updateInterval{ std::chrono::duration<float>(PHYSICS_TIME_STEP) };
+	const auto updateInterval{ std::chrono::duration<float>(BASE_PHYSICS_TIMESTEP) };
 
 	while (!stopToken.stop_requested())
 	{
@@ -68,7 +109,10 @@ void Simulation::SimulationLoop(std::stop_token stopToken)
 
 		if (!_paused.load(std::memory_order_relaxed))
 		{
-			UpdatePhysics(PHYSICS_TIME_STEP);
+			{
+				std::lock_guard lock{ _timestepMutex };
+				UpdatePhysics(_physicsTimestep);
+			}
 			PublishSnapshot();
 		}
 
@@ -76,7 +120,7 @@ void Simulation::SimulationLoop(std::stop_token stopToken)
 	}
 }
 
-void Simulation::UpdateCamera(float deltaTime, bool fastMove, bool slowMove, const SimulationInput& userInput)
+void Simulation::UpdateCamera(float deltaTime, MoveSpeed moveSpeed, const SimulationInput& userInput)
 {
 	_camera->SetAspectRatio(static_cast<float>(userInput.windowWidth) / static_cast<float>(userInput.windowHeight));
 
@@ -96,8 +140,16 @@ void Simulation::UpdateCamera(float deltaTime, bool fastMove, bool slowMove, con
 		movement = glm::normalize(movement);
 
 		float speed{ CAMERA_MOVE_SPEED };
-		if (fastMove) speed *= FAST_MOVE_FACTOR;
-		if (slowMove) speed *= SLOW_MOVE_FACTOR;
+		switch (moveSpeed)
+		{
+		case MoveSpeed::Fast:
+			speed *= FAST_MOVE_FACTOR;
+			break;
+			
+		case MoveSpeed::Slow:
+			speed *= SLOW_MOVE_FACTOR;
+			break;
+		}
 
 		cameraPosition += movement * deltaTime * speed;
 	}

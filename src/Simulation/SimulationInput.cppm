@@ -4,6 +4,13 @@ module;
 
 export module Celestial.Simulation.Input;
 
+export enum MoveSpeed
+{
+	Base,
+	Fast,
+	Slow
+};
+
 export struct SimulationInput
 {
 	std::uint32_t windowWidth{};
