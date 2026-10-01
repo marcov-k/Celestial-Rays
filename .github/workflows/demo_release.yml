@@ -81,6 +81,17 @@ jobs:
 
           echo "BUILDDIR=$BuildDir" >> $env:GITHUB_OUTPUT
 
+      - name: Stage runtime DLLs
+        shell: pwsh
+        run: |
+          $BuildDir = "${{ steps.demo_files.outputs.BUILDDIR }}"
+          cmake --install "$BuildDir" --prefix "$BuildDir"
+          foreach ($dll in 'vcomp140.dll', 'vcruntime140.dll') {
+            if (-not (Test-Path "$BuildDir\$dll")) {
+              throw "$dll missing from build dir"
+            }
+          }
+
       - name: Build installer
         shell: pwsh
         run: |
