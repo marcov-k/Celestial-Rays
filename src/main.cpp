@@ -8,12 +8,19 @@
 #include <numbers>
 #include <print>
 #include <stdexcept>
+#include <string>
+#include <thread>
 
 import Celestial.Simulation;
 import Celestial.Simulation.Input;
 import Celestial.Rendering;
 import Celestial.Vulkan;
 import Celestial.Window;
+
+static void ShowFatalError(const std::string& message)
+{
+	std::thread([&message] { MessageBoxA(nullptr, message.c_str(), "Celestial-Rays - Fatal error", MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST); }).join();
+}
 
 int main()
 {
@@ -65,12 +72,12 @@ int main()
 	catch (const std::exception& exception)
 	{
 		std::println(stderr, "Fatal error: {}", exception.what());
-		MessageBoxA(nullptr, exception.what(), "Celestial-Rays - Fatal error", MB_OK | MB_ICONERROR);
+		ShowFatalError(exception.what());
 		return 1;
 	}
 	catch (...)
 	{
-		MessageBoxA(nullptr, "Unknown fatal error", "Celestial-Rays - Fatal error", MB_OK | MB_ICONERROR);
+		ShowFatalError("Unknown fatal error");
 		return 1;
 	}
 }
