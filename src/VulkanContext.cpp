@@ -178,9 +178,14 @@ namespace
 
 		VkResult result{ vkEnumerateInstanceVersion(&version) };
 
-		if (result == VK_ERROR_INCOMPATIBLE_DRIVER) return VK_API_VERSION_1_0;
+		if (result == VK_ERROR_INCOMPATIBLE_DRIVER) throw std::runtime_error("Found incompatible Vulkan driver");
 
 		if (result != VK_SUCCESS) throw std::runtime_error("Failed to determine supported Vulkan API version");
+
+		std::uint32_t major{ VK_API_VERSION_MAJOR(version) };
+		std::uint32_t minor{ VK_API_VERSION_MINOR(version) };
+
+		if (major <= 1 && minor < 3) throw std::runtime_error("Vulkan version 1.3 or higher required, please upgrade your drivers");
 
 		return version;
 	}
