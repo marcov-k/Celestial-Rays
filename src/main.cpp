@@ -68,4 +68,9 @@ int main()
 		MessageBoxA(nullptr, exception.what(), "Celestial-Rays - Fatal error", MB_OK | MB_ICONERROR);
 		return 1;
 	}
+	catch (...)
+	{
+		MessageBoxA(nullptr, "Unknown fatal error", "Celestial-Rays - Fatal error", MB_OK | MB_ICONERROR);
+		return 1;
+	}
 }
