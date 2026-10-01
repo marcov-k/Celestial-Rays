@@ -1,4 +1,5 @@
 ﻿cmake_minimum_required(VERSION 4.0)
+cmake_policy(SET CMP0091 NEW)
 
 project(Celestial-Rays
 	LANGUAGES CXX
@@ -7,6 +8,10 @@ project(Celestial-Rays
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+set(CMAKE_INSTALL_OPENMP_LIBRARIES TRUE)
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
+include(InstallRequiredSystemLibraries)
 
 add_executable(Celestial-Rays
 	src/main.cpp
