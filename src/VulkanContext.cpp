@@ -18,6 +18,11 @@ module Celestial.Vulkan;
 
 namespace
 {
+#ifdef NDEBUG
+	constexpr bool EnableValidation{ false };
+#else
+	constexpr bool EnableValidation{ true };
+#endif
 	constexpr const char* ValidationLayer = "VK_LAYER_KHRONOS_validation";
 
 	constexpr std::uint32_t LayerCount = 1;
@@ -25,11 +30,10 @@ namespace
 		ValidationLayer
 	};
 
-	constexpr std::uint32_t ExtensionCount = 3;
-	const char* Extensions[] = {
+	constexpr const char* DebugUtilsExtension = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+	const char* RequiredExtensions[] = {
 		VK_KHR_SURFACE_EXTENSION_NAME,
-		VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
-		VK_EXT_DEBUG_UTILS_EXTENSION_NAME
+		VK_KHR_WIN32_SURFACE_EXTENSION_NAME
 	};
 
 	constexpr std::uint32_t DeviceExtensionCount = 1;
@@ -97,35 +101,35 @@ namespace
 		return false;
 	}
 
-	bool CheckInstanceExtensionSupport()
+	bool InstanceExtensionAvailable(const char* name)
 	{
 		std::uint32_t extensionCount{};
 		VkResult result{ vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr) };
-
 		if (result != VK_SUCCESS) return false;
 
-		std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-		result = vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, availableExtensions.data());
-
+		std::vector<VkExtensionProperties> available(extensionCount);
+		result = vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, available.data());
 		if (result != VK_SUCCESS) return false;
 
-		for (const char* required : Extensions)
+		for (const auto& extension : available)
 		{
-			bool found{};
-
-			for (const auto& extension : availableExtensions)
-			{
-				if (std::strcmp(extension.extensionName, required) == 0)
-				{
-					found = true;
-					break;
-				}
-			}
-
-			if (!found) return false;
+			if (std::strcmp(extension.extensionName, name) == 0) return true;
 		}
+		return false;
+	}
 
+	bool CheckInstanceExtensionSupport()
+	{
+		for (const char* required : RequiredExtensions)
+		{
+			if (!InstanceExtensionAvailable(required)) return false;
+		}
 		return true;
+	}
+
+	bool ValidationAvailable()
+	{
+		return EnableValidation && CheckValidationLayerSupport() && InstanceExtensionAvailable(DebugUtilsExtension);
 	}
 
 	bool CheckDeviceExtensionSupport(VkPhysicalDevice device)
@@ -613,7 +617,12 @@ void VulkanContext::UpdateDescriptorSets(const std::vector<VkWriteDescriptorSet>
 
 void VulkanContext::CreateInstance()
 {
-	if (!CheckValidationLayerSupport()) throw std::runtime_error(std::format("{} is not available", ValidationLayer));
+	const bool validation{ ValidationAvailable() };
+
+	if (EnableValidation && !validation)
+	{
+		std::println(stderr, "{} unavailable; continuing without validation", ValidationLayer);
+	}
 
 	if (!CheckInstanceExtensionSupport()) throw std::runtime_error("Required extensions are not available");
 
@@ -628,14 +637,17 @@ void VulkanContext::CreateInstance()
 		.apiVersion = apiVersion
 	};
 
+	std::vector<const char*> extensions(std::begin(RequiredExtensions), std::end(RequiredExtensions));
+	if (validation) extensions.push_back(DebugUtilsExtension);
+
 	VkInstanceCreateInfo instanceInfo{
 		.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-		.pNext = &MessengerInfo,
+		.pNext = validation ? &MessengerInfo : nullptr,
 		.pApplicationInfo = &applicationInfo,
-		.enabledLayerCount = LayerCount,
+		.enabledLayerCount = validation ? LayerCount : 0,
 		.ppEnabledLayerNames = ValidationLayers,
-		.enabledExtensionCount = ExtensionCount,
-		.ppEnabledExtensionNames = Extensions
+		.enabledExtensionCount = static_cast<std::uint32_t>(extensions.size()),
+		.ppEnabledExtensionNames = extensions.data()
 	};
 
 	_instance.emplace(&instanceInfo);
@@ -643,6 +655,8 @@ void VulkanContext::CreateInstance()
 
 void VulkanContext::CreateDebugMessenger()
 {
+	if (!ValidationAvailable()) return;
+
 	_debugMessenger.emplace(_instance->GetInstance(), &MessengerInfo);
 }
 
