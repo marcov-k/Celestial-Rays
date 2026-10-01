@@ -65,6 +65,7 @@ int main()
 	catch (const std::exception& exception)
 	{
 		std::println(stderr, "Fatal error: {}", exception.what());
+		MessageBoxA(nullptr, exception.what(), "Celestial-Rays - Fatal error", MB_OK | MB_ICONERROR);
 		return 1;
 	}
 }
