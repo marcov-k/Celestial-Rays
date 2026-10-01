@@ -84,8 +84,6 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          $Version = "${{ github.ref_name }}".TrimStart("demo-v")
-
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
             "/DAppVersion=${{ steps.version.outputs.VERSION }}" `
             "/DBuildDir=${{ steps.demo_files.outputs.BUILDDIR }}" `
